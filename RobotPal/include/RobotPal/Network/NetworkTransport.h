@@ -29,6 +29,10 @@ public:
     virtual void Disconnect() = 0;
 
     virtual void Send(const std::vector<uint8_t>& data) = 0;
+    virtual void Send(const std::vector<uint8_t>& data, uint32_t frameId) {
+        (void)frameId;
+        Send(data);
+    }
     
     virtual bool IsConnected() const = 0;
 

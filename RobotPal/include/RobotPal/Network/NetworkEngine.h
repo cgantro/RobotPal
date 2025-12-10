@@ -35,6 +35,7 @@ public:
 
     // --- TX/RX ---
     void SendPacket(const std::vector<uint8_t>& rawData);
+    void SendPacket(const std::vector<uint8_t>& rawData, uint32_t frameId);
     std::optional<Packet> GetPacket();                      
 private:
     flecs::world& m_World;

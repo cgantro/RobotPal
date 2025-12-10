@@ -1,4 +1,5 @@
 #include "RobotPal/Network/TcpNetworkTransport.h"
+#include "RobotPal/Network/TcpSendAll.h"
 #include <iostream>
 #include <chrono>
 #include <cstring>
@@ -91,11 +92,23 @@ void TcpNetworkTransport::Disconnect()
 
 void TcpNetworkTransport::Send(const std::vector<uint8_t>& data)
 {
-    // [핵심] 큐에만 넣고 즉시 리턴 (Main Thread Blocking 방지)
-    if (m_IsConnected) {
-        m_SendQueue.Push(data);
-        robotpal::benchmark::Event("transport_queued", BenchmarkFrameId(data), 0, m_SendQueue.Size());
+    auto frameId = BenchmarkFrameId(data);
+    if (frameId == 0) frameId = m_UnframedSequence.fetch_add(1, std::memory_order_relaxed);
+    Send(data, frameId);
+}
+
+void TcpNetworkTransport::Send(const std::vector<uint8_t>& data, uint32_t frameId)
+{
+    if (!m_IsConnected) return;
+    auto result = m_SendQueue.Push(frameId, data);
+    if (!result.accepted) {
+        robotpal::benchmark::Event("transport_stale_dropped", frameId, 0, m_SendQueue.Size(), "older_frame");
+        return;
     }
+    if (result.droppedFrameId) {
+        robotpal::benchmark::Event("transport_queue_dropped", *result.droppedFrameId, 0, m_SendQueue.Size(), "latest_frame_wins_capacity_2");
+    }
+    robotpal::benchmark::Event("transport_queued", frameId, 0, m_SendQueue.Size());
 }
 
 // --- Background Threads ---
@@ -147,20 +160,27 @@ void TcpNetworkTransport::SendWorker()
         if (packetOpt.has_value())
         {
             const auto& data = packetOpt->data;
-            const auto frameId = BenchmarkFrameId(data);
+            const auto frameId = packetOpt->frameId;
             const auto sendStart = robotpal::benchmark::SteadyNowNs();
-            int sent = send(m_Socket, (const char*)data.data(), (int)data.size(), 0);
+            const auto sendResult = TcpSendAll(data.data(), data.size(), [this](const char* bytes, int length) {
+                if (!m_IsRunning) return 0;
+                int flags = 0;
+#ifdef MSG_NOSIGNAL
+                flags |= MSG_NOSIGNAL;
+#endif
+                return send(m_Socket, bytes, length, flags);
+            });
             const auto sendNs = robotpal::benchmark::SteadyNowNs() - sendStart;
 
-            if (sent == SOCKET_ERROR) {
-                robotpal::benchmark::Event("send_failed", frameId, sendNs, 0, "socket_error");
-                std::cerr << "[TCP] Send Error\n";
+            if (sendResult.status != TcpSendStatus::Complete) {
+                const char* reason = sendResult.status == TcpSendStatus::SocketError ? "socket_error" :
+                                     (m_IsRunning ? "zero_byte_send" : "shutdown");
+                robotpal::benchmark::Event("send_failed", frameId, sendNs, sendResult.bytesSent, reason);
+                if (m_IsRunning) std::cerr << "[TCP] Send Error\n";
                 m_IsConnected = false;
                 break;
-            } else if (sent != static_cast<int>(data.size())) {
-                robotpal::benchmark::Event("send_failed", frameId, sendNs, sent, "partial_send");
             } else {
-                robotpal::benchmark::Event("send_completed", frameId, sendNs, sent);
+                robotpal::benchmark::Event("send_completed", frameId, sendNs, sendResult.bytesSent);
             }
         }
         else
