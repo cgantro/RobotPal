@@ -10,6 +10,8 @@
 #include <mutex>
 #include <thread>
 #include <vector>
+#include <string>
+#include <cstdlib>
 
 struct Job {
     std::vector<uint8_t> rgba;
@@ -139,17 +141,34 @@ Result RunScenario(int workerCount, int width, int height, int quality, int inpu
     return r;
 }
 
-int main() {
-    const int width = 1920;
-    const int height = 1080;
-    const int quality = 70;
-    const int inputFps = 120;
-    const int durationSec = 8;
-    const size_t maxQueueSize = 6;
+int main(int argc, char** argv) {
+    int width = 1920;
+    int height = 1080;
+    int quality = 70;
+    int inputFps = 120;
+    int durationSec = 8;
+    size_t maxQueueSize = 6;
+
+    if (argc > 1) width = std::atoi(argv[1]);
+    if (argc > 2) height = std::atoi(argv[2]);
+    if (argc > 3) inputFps = std::atoi(argv[3]);
+    if (argc > 4) durationSec = std::atoi(argv[4]);
+    if (argc > 5) quality = std::atoi(argv[5]);
+    if (argc > 6) maxQueueSize = static_cast<size_t>(std::max(1, std::atoi(argv[6])));
 
     const int beforeWorkers = 1;
     const unsigned hw = std::max(1u, std::thread::hardware_concurrency());
     const int afterWorkers = static_cast<int>(std::max(2u, hw));
+
+    std::cout << "Benchmark config: width=" << width
+              << " height=" << height
+              << " input_fps=" << inputFps
+              << " duration_sec=" << durationSec
+              << " quality=" << quality
+              << " queue=" << maxQueueSize
+              << " before_workers=" << beforeWorkers
+              << " after_workers=" << afterWorkers
+              << "\n";
 
     const Result before = RunScenario(beforeWorkers, width, height, quality, inputFps, durationSec, maxQueueSize);
     const Result after = RunScenario(afterWorkers, width, height, quality, inputFps, durationSec, maxQueueSize);
