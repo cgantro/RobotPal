@@ -4,6 +4,7 @@
 #include "RobotPal/Util/bench.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <vector>
 
 static PerfStats perfEncode;
@@ -24,6 +25,14 @@ static StreamingThreadConfig GetStreamingThreadConfig() {
         return {1};
     #endif
 #else
+    // Optional override for A/B benchmarking.
+    if (const char* forced = std::getenv("ROBOTPAL_ENCODE_WORKERS")) {
+        const int parsed = std::atoi(forced);
+        if (parsed > 0) {
+            return {static_cast<unsigned>(parsed)};
+        }
+    }
+
     // Native TCP
     return {std::max(1u, std::thread::hardware_concurrency() - 3) };
 #endif
