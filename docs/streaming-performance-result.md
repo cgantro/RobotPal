@@ -46,6 +46,85 @@
 - PowerShell 프로세스 샘플링으로 CPU 사용률과 최대 Working Set 기록
 - 분석 스크립트로 처리량, p50·p95·p99·최대값 및 누락 원인 계산
 
+### 시간 계측 구현
+
+단일 프로세스 안의 구간 처리시간은 시스템 시간 변경의 영향을 받지 않는 단조 시계를 사용했다.
+
+| 실행 영역 | 사용 시계 | 기록 목적 |
+|---|---|---|
+| C++ 송신 프로그램 | `std::chrono::steady_clock`, nanosecond | Readback, 큐 대기, JPEG, TCP send 등 프로세스 내부 구간시간 |
+| C++ 송신 프로그램 | `std::chrono::system_clock`, Unix nanosecond | Python 수신 프로그램과 종단간 시각 연결 |
+| Python 수신 프로그램 | `time.perf_counter_ns()` | JPEG decode 및 consume 구간시간 |
+| Python 수신 프로그램 | `time.time_ns()` | C++ 생성 시각과 비교한 종단간 지연 |
+
+각 구간은 시작과 종료 시점의 단조 시계 차이를 `duration_ns`로 기록했다. 송신 프로그램과 수신 프로그램은 별도 프로세스이므로, 프로세스 간 종단간 지연은 같은 장비의 Unix nanosecond 시각을 사용해 다음과 같이 계산했다.
+
+```text
+구간 처리시간 = steady_end_ns - steady_start_ns
+종단간 지연 = receiver_consumed_unix_ns - frame_generated_unix_ns
+```
+
+localhost의 같은 Windows 시스템 시계를 공유했기 때문에 별도 장비 간 시계 동기화 오차는 없지만, 운영체제 스케줄링과 시스템 시계 보정의 영향은 남을 수 있다.
+
+### 프레임 단위 추적과 로그 형식
+
+각 프레임에 32비트 `frame_id`와 생성 시각 `generated_unix_ns`를 부여했다. 벤치마크 실행 중에는 JPEG 앞에 다음 메타데이터를 추가해 TCP/WebSocket 수신 후에도 동일 프레임을 연결했다.
+
+```text
+RPBENCH1 magic 8바이트
++ frame_id 4바이트
++ generated_unix_ns 8바이트
++ JPEG payload
+```
+
+송신부와 수신부는 이벤트 한 건을 JSONL 한 줄로 즉시 기록했다. 주요 필드는 다음과 같다.
+
+| 필드 | 의미 |
+|---|---|
+| `event` | 측정 구간 또는 실패·폐기 원인 |
+| `frame_id` | 생성부터 최종 소비까지 연결할 프레임 식별자 |
+| `steady_ns` | 프로세스 내부 이벤트 순서와 경과시간 기준 |
+| `unix_ns` | 송신·수신 프로세스 간 종단간 시간 기준 |
+| `duration_ns` | 해당 구간에서 측정한 처리시간 |
+| `value` | 데이터 크기 또는 측정 시점의 큐 길이 |
+| `reason` | 폐기 및 실패 원인 |
+
+기록한 주요 이벤트는 다음과 같다.
+
+```text
+frame_generated
+readback_sync_glreadpixels
+readback_pbo_submit / readback_pbo_map / readback_pbo_copy
+readback_completed / readback_failed
+encode_queued / encode_dequeued / encode_queue_dropped
+encode_completed / encode_failed
+transport_queued / send_queued / send_completed / send_failed
+received / consumed / receive_failed / receive_dropped
+```
+
+이를 통해 단순히 목표 FPS와 최종 수신 수의 차이를 모두 드랍으로 처리하지 않고, 입력 생성 수, 큐 폐기, 인코딩 실패, 송신 실패, 수신 실패 및 종료 시 파이프라인 잔여 프레임을 구분했다.
+
+### 통계와 시스템 자원 계산
+
+최초 10초는 워밍업으로 제외하고, 이후 생성된 `frame_id`만 송신·수신 로그에서 선택했다. 각 구간의 `duration_ns` 표본을 ms로 변환해 정렬한 뒤 p50·p95·p99를 선형 보간으로 계산하고 최대값을 함께 기록했다.
+
+```text
+측정시간 = 마지막 선택 이벤트 시각 - 최초 선택 이벤트 시각
+생성 처리량 = frame_generated / 측정시간
+최종 처리량 = consumed / 측정시간
+큐 폐기율 = encode_queue_dropped / encode_queued
+전체 미소비율 = (frame_generated - consumed) / frame_generated
+```
+
+PowerShell에서 1초마다 송신·수신 관련 프로세스의 누적 CPU 시간과 Working Set을 샘플링했다.
+
+```text
+CPU 사용률 = 누적 CPU 시간 증가량 / 샘플 간격 × 100
+최대 메모리 = 샘플 중 프로세스 Working Set 합계의 최대값
+```
+
+CPU 사용률은 프로세스가 사용한 전체 논리 코어 시간을 합산하므로 멀티코어 사용 시 100%를 넘을 수 있다. 또한 실행별 생성·인코딩·송신·수신·소비 건수와 중복 ID를 대조하고, `송신=수신`, `수신=소비`, 실패 이벤트 0건 여부를 신뢰성 조건으로 확인했다.
+
 프레임 폐기율은 다음과 같이 정의했다.
 
 ```text
