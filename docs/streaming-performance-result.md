@@ -1,224 +1,163 @@
-# 카메라 스트리밍 성능 측정 최종 정리
+# RobotPal 카메라 스트리밍 성능 최적화
 
-이 문서는 RobotPal의 실제 카메라 스트리밍 경로에서 동기 Readback과 PBO Readback, JPEG 단일·멀티워커를 비교한 탐색 측정 결과를 정리한다. 조건별 1회 측정이므로 수치는 현재 환경에서 병목의 위치와 변화 방향을 판단하기 위한 값이며, 일반적인 성능 보장이나 확정 개선률로 사용하지 않는다.
+> **Canonical benchmark — 2026-10-08**
+>
+> 이 문서의 수치와 해석을 RobotPal 카메라 스트리밍 성능의 최신 기준으로 사용한다. 이전 문서·포트폴리오·경험 DB에 남아 있던 32.9→37.3fps, Readback 24.4→20.7ms, 큐 폐기 297→0 등의 탐색 측정 수치는 최신 성과 수치로 사용하지 않는다.
 
-## 1. 측정 조건 및 사용 기술
+## 1. 목표
 
-### 측정 조건
+JETANK 번호판 인식에 필요한 영상 품질을 유지하기 위해 카메라 해상도를 **1232×832**로 고정하고, 실물 카메라 운용 수준을 고려해 스트리밍 상한을 **60 FPS**로 설정했다.
 
-| 항목 | 조건 |
-|---|---|
-| 빌드 | x64 Release |
-| 카메라/FBO 해상도 | 1232×832 RGBA |
-| 입력 선택률 | `rate=1` |
-| JPEG 품질 | 70 |
-| JPEG 워커 | 1개 또는 4개로 고정 |
-| 인코딩 큐 | bounded queue, 용량 6, 초과 시 가장 오래된 프레임 폐기 |
-| 네트워크 | localhost TCP |
-| 수신부 | 실제 Python TCP 수신, JPEG decode 및 consume 경로 |
-| 실행시간 | 조건별 약 60초 |
-| 워밍업 | 최초 10초 제외 |
-| 분석 구간 | 약 49.8초 |
-| 반복 | 조건별 1회 |
+해상도를 낮추는 방식은 사용하지 않고 다음 두 항목을 개선 대상으로 삼았다.
 
-### 실제 측정 경로
+- Camera Streaming Send FPS
+- Streaming ON 상태의 Simulation FPS
 
-```text
-카메라 FBO 렌더링
-→ GPU Readback
-→ 인코딩 큐 적재 및 대기
-→ JPEG 압축
-→ 전송 큐
-→ C++ TCP 송신
-→ Python TCP 수신
-→ JPEG decode 및 consume
-```
+수신·디코딩 성능은 이번 측정 범위에서 제외했다.
 
-### 사용 기술과 계측
+---
 
-- OpenGL 직접 `glReadPixels`를 사용하는 동기 Readback
-- 두 개의 PBO를 ping-pong 방식으로 사용하는 비동기 Readback
-- `glMapBufferRange`를 통한 PBO 데이터 회수
-- C++ JPEG 단일·멀티워커
-- bounded queue와 drop-oldest 정책
-- C++ JSONL 계측으로 프레임 생성, Readback, 큐 대기, JPEG, TCP 송신 기록
-- Python 계측으로 TCP 수신, JPEG decode 및 최종 consume 기록
-- PowerShell 프로세스 샘플링으로 CPU 사용률과 최대 Working Set 기록
-- 분석 스크립트로 처리량, p50·p95·p99·최대값 및 누락 원인 계산
+## 2. 실험 구성
 
-### 시간 계측 구현
+세 단계의 구조를 동일한 환경에서 비교했다.
 
-단일 프로세스 안의 구간 처리시간은 시스템 시간 변경의 영향을 받지 않는 단조 시계를 사용했다.
-
-| 실행 영역 | 사용 시계 | 기록 목적 |
+| 단계 | GPU Readback | JPEG |
 |---|---|---|
-| C++ 송신 프로그램 | `std::chrono::steady_clock`, nanosecond | Readback, 큐 대기, JPEG, TCP send 등 프로세스 내부 구간시간 |
-| C++ 송신 프로그램 | `std::chrono::system_clock`, Unix nanosecond | Python 수신 프로그램과 종단간 시각 연결 |
-| Python 수신 프로그램 | `time.perf_counter_ns()` | JPEG decode 및 consume 구간시간 |
-| Python 수신 프로그램 | `time.time_ns()` | C++ 생성 시각과 비교한 종단간 지연 |
+| baseline-sync | 동기 `glReadPixels` | Main Thread |
+| PBO | Non-blocking PBO + Fence | Main Thread |
+| PBO-MT | Non-blocking PBO + Fence | 4 Worker Threads |
 
-각 구간은 시작과 종료 시점의 단조 시계 차이를 `duration_ns`로 기록했다. 송신 프로그램과 수신 프로그램은 별도 프로세스이므로, 프로세스 간 종단간 지연은 같은 장비의 Unix nanosecond 시각을 사용해 다음과 같이 계산했다.
+Streaming OFF/ON을 각각 5회 측정하고 median을 사용했다. Streaming-OFF FPS의 브랜치 간 차이는 **0.557%**로 sanity gate 5%를 통과했다.
 
-```text
-구간 처리시간 = steady_end_ns - steady_start_ns
-종단간 지연 = receiver_consumed_unix_ns - frame_generated_unix_ns
-```
+---
 
-localhost의 같은 Windows 시스템 시계를 공유했기 때문에 별도 장비 간 시계 동기화 오차는 없지만, 운영체제 스케줄링과 시스템 시계 보정의 영향은 남을 수 있다.
+## 3. 최종 결과
 
-### 프레임 단위 추적과 로그 형식
+| 단계 | Simulation FPS OFF | Simulation FPS ON | Camera Send FPS | Streaming Penalty |
+|---|---:|---:|---:|---:|
+| Sync | 102.38 | 66.70 | 26.95 | 34.84% |
+| PBO | 102.52 | 65.60 | 25.49 | 36.02% |
+| PBO + MT | 102.95 | **96.01** | **40.05** | **6.74%** |
 
-각 프레임에 32비트 `frame_id`와 생성 시각 `generated_unix_ns`를 부여했다. 벤치마크 실행 중에는 JPEG 앞에 다음 메타데이터를 추가해 TCP/WebSocket 수신 후에도 동일 프레임을 연결했다.
+최종 PBO+MT 구조는 Sync 대비 Streaming ON Simulation FPS를 **약 43.9%**, Camera Send FPS를 **약 48.6%** 향상시켰다.
 
-```text
-RPBENCH1 magic 8바이트
-+ frame_id 4바이트
-+ generated_unix_ns 8바이트
-+ JPEG payload
-```
+Streaming으로 인한 Simulation FPS 손실은 **34.84% → 6.74%**, 즉 **28.1%p 감소**했다.
 
-송신부와 수신부는 이벤트 한 건을 JSONL 한 줄로 즉시 기록했다. 주요 필드는 다음과 같다.
+---
 
-| 필드 | 의미 |
-|---|---|
-| `event` | 측정 구간 또는 실패·폐기 원인 |
-| `frame_id` | 생성부터 최종 소비까지 연결할 프레임 식별자 |
-| `steady_ns` | 프로세스 내부 이벤트 순서와 경과시간 기준 |
-| `unix_ns` | 송신·수신 프로세스 간 종단간 시간 기준 |
-| `duration_ns` | 해당 구간에서 측정한 처리시간 |
-| `value` | 데이터 크기 또는 측정 시점의 큐 길이 |
-| `reason` | 폐기 및 실패 원인 |
+## 4. 병목 분석
 
-기록한 주요 이벤트는 다음과 같다.
+Tracy 계측 결과 동기 방식의 Readback p50은 **1.144 ms**였지만 JPEG 압축은 **16.406 ms**가 소요됐다.
 
-```text
-frame_generated
-readback_sync_glreadpixels
-readback_pbo_submit / readback_pbo_map / readback_pbo_copy
-readback_completed / readback_failed
-encode_queued / encode_dequeued / encode_queue_dropped
-encode_completed / encode_failed
-transport_queued / send_queued / send_completed / send_failed
-received / consumed / receive_failed / receive_dropped
-```
+| 단계 | 구간 | p50 | p95 | p99 |
+|---|---|---:|---:|---:|
+| Sync | Readback | 1.144 ms | 2.046 ms | 2.570 ms |
+| Sync | JPEG | **16.406 ms** | 19.216 ms | 20.422 ms |
+| PBO | Readback | 1.908 ms | 2.705 ms | 3.089 ms |
+| PBO | JPEG | **17.601 ms** | 20.726 ms | 22.115 ms |
+| PBO-MT | Readback | 2.415 ms | 3.860 ms | 4.261 ms |
+| PBO-MT | JPEG Worker | 27.075 ms | 32.353 ms | 34.349 ms |
+| PBO-MT | Main-thread enqueue | **0.017 ms** | 0.044 ms | 0.060 ms |
 
-이를 통해 단순히 목표 FPS와 최종 수신 수의 차이를 모두 드랍으로 처리하지 않고, 입력 생성 수, 큐 폐기, 인코딩 실패, 송신 실패, 수신 실패 및 종료 시 파이프라인 잔여 프레임을 구분했다.
+따라서 초기 가설과 달리 **GPU Readback보다 JPEG 압축이 훨씬 큰 main-thread 병목**이었다.
 
-### 통계와 시스템 자원 계산
+`stb_image_write` 자체도 구현 목표를 “compactness and simplicity”에 두며 최적 runtime performance를 목표로 하지 않는다고 명시한다.
 
-최초 10초는 워밍업으로 제외하고, 이후 생성된 `frame_id`만 송신·수신 로그에서 선택했다. 각 구간의 `duration_ns` 표본을 ms로 변환해 정렬한 뒤 p50·p95·p99를 선형 보간으로 계산하고 최대값을 함께 기록했다.
+---
+
+## 5. PBO 단독 적용이 개선되지 않은 이유
+
+PBO는 pixel transfer를 비동기화해 CPU와 GPU 작업을 겹치게 하기 위한 기법이다. 하지만 PBO를 사용한 뒤 데이터를 너무 빨리 접근하면 비동기화 이점을 얻기 어렵고, 전송 중 수행할 다른 작업이 있어야 효과가 있다.
+
+이번 PBO 구현에서는 GPU readback을 기다리지 않도록 fence polling을 적용했지만, 완료된 PBO 데이터를 JPEG 입력으로 사용하려면 결국 CPU 메모리로 복사해야 한다.
+
+1232×832 RGB 한 프레임은 약 **2.93 MiB**다.
 
 ```text
-측정시간 = 마지막 선택 이벤트 시각 - 최초 선택 이벤트 시각
-생성 처리량 = frame_generated / 측정시간
-최종 처리량 = consumed / 측정시간
-큐 폐기율 = encode_queue_dropped / encode_queued
-전체 미소비율 = (frame_generated - consumed) / frame_generated
+GPU Render Target
+      ↓
+PBO
+      ↓
+map
+      ↓
+약 2.93 MiB memcpy
+      ↓
+CPU JPEG
 ```
 
-PowerShell에서 1초마다 송신·수신 관련 프로세스의 누적 CPU 시간과 Working Set을 샘플링했다.
+결과적으로 Sync의 단순 readback 비용을 줄여 얻는 이익보다 PBO 관리와 CPU 복사 비용이 더 크게 나타났고, PBO-only에서는 유의미한 전체 성능 개선이 발생하지 않았다.
+
+따라서 이번 결과에서 중요한 것은 **“PBO가 느린 기술”이라는 결론이 아니라, 이 workload에서 PBO만으로 제거할 수 있는 병목 비중이 작았다**는 점이다.
+
+---
+
+## 6. 내장 GPU와 외장 GPU의 차이
+
+Intel Iris Xe와 같은 iGPU는 별도의 VRAM 대신 CPU와 system memory를 공유한다. 따라서 이번 환경에서는 별도 VRAM을 가진 dGPU에 비해 GPU→CPU pixel transfer를 비동기화해서 얻을 수 있는 이점이 상대적으로 작을 수 있다.
+
+다만 이것이 **iGPU에서 PBO나 double buffering이 무효라는 의미는 아니다.** 충분한 GPU/CPU 작업을 중첩할 수 있다면 iGPU에서도 PBO가 효과를 낼 수 있다.
+
+이번 실험에서 확인된 것은 제한적이다.
+
+> Iris Xe + 1232×832 + 즉시 CPU JPEG 처리라는 현재 workload에서는 PBO-only의 이점이 관측되지 않았으며, 메모리 복사와 CPU 처리 비용을 줄이는 것이 더 중요했다.
+
+반대로 dedicated VRAM을 사용하는 dGPU에서는 framebuffer readback 시 GPU 메모리와 CPU 메모리 사이의 전송을 다른 작업과 중첩할 여지가 더 크기 때문에 PBO의 비동기 전송 구조가 보다 의미 있는 효과를 낼 가능성이 있다. 그러나 실제 효과는 GPU, 드라이버, format 및 pipeline 구조에 따라 별도 측정이 필요하다.
+
+---
+
+## 7. 멀티스레딩 효과
+
+PBO-MT에서는 JPEG 단일 작업 시간이 오히려 **p50 27.075 ms**로 증가했다.
+
+이는 JPEG 자체가 빨라진 것이 아니다. 여러 worker가 동시에 CPU 자원을 사용하면서 개별 job latency는 증가할 수 있다.
+
+핵심은 **Main Thread가 JPEG 완료를 기다리지 않게 된 것**이다.
 
 ```text
-CPU 사용률 = 누적 CPU 시간 증가량 / 샘플 간격 × 100
-최대 메모리 = 샘플 중 프로세스 Working Set 합계의 최대값
+Before
+
+Simulation
+ → Readback
+ → JPEG 16~20 ms
+ → Send
+ → 다음 Simulation Frame
+
+
+After
+
+Simulation
+ → Readback
+ → Queue 0.017 ms
+ → 다음 Simulation Frame
+
+             └→ JPEG Worker ×4
+                  → Send
 ```
 
-CPU 사용률은 프로세스가 사용한 전체 논리 코어 시간을 합산하므로 멀티코어 사용 시 100%를 넘을 수 있다. 또한 실행별 생성·인코딩·송신·수신·소비 건수와 중복 ID를 대조하고, `송신=수신`, `수신=소비`, 실패 이벤트 0건 여부를 신뢰성 조건으로 확인했다.
+그 결과 개별 JPEG latency가 증가했음에도 여러 worker가 병렬로 처리하면서 전체 Camera Send FPS는 **26.95 → 40.05 FPS**로 증가했고, Simulation FPS는 **66.70 → 96.01 FPS**로 회복됐다.
 
-프레임 폐기율은 다음과 같이 정의했다.
+즉 최종 성능 향상의 핵심은 **JPEG 알고리즘의 고속화가 아니라 JPEG 작업을 simulation critical path에서 제거한 것**이다.
 
-```text
-인코딩 큐 폐기율 = encode_queue_dropped / encode_queued × 100
-```
+---
 
-최종 처리량은 워밍업을 제외한 구간에서 Python 수신부가 최종 소비한 프레임 수를 측정시간으로 나눈 값이다.
+## 8. 결론
 
-```text
-최종 처리량 = consumed / measured_seconds
-```
+이번 최적화에서는 처음에 GPU Readback을 주요 병목으로 예상해 PBO 기반 비동기 readback을 적용했다. 그러나 실제 계측 결과 PBO 단독 적용은 성능을 개선하지 못했다.
 
-## 2. 단계별 결과
+Tracy 분석을 통해 Readback보다 JPEG 압축이 훨씬 큰 Main Thread 병목임을 확인했고, JPEG 작업을 worker thread로 분리했다.
 
-비교 시나리오는 다음과 같다.
+최종적으로 **1232×832 번호판 인식 해상도를 유지하면서**
 
-1. 동기 Readback + JPEG 단일 워커
-2. PBO 비동기 Readback + JPEG 단일 워커
-3. PBO 비동기 Readback + JPEG 4개 워커
+- **Simulation FPS**: `66.70 → 96.01 FPS`
+- **Camera Send FPS**: `26.95 → 40.05 FPS`
+- **Streaming Penalty**: `34.84% → 6.74%`
 
-### 전체 결과
+를 달성했다.
 
-| 단계 | 생성률 | 최종 처리량 | Readback p50 | JPEG p50 | 큐 대기 p50 | 큐 폐기율 | 종단간 p50 |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| 동기 + worker1 | 34.857fps | 34.857fps | 24.459ms | 25.186ms | 0.165ms | 0% | 73.382ms |
-| PBO + worker1 | 38.892fps | 32.889fps | 20.728ms | 27.601ms | 141.157ms | 15.33% | 240.824ms |
-| PBO + worker4 | 37.348fps | 37.328fps | 20.680ms | 28.403ms | 0.073ms | 0% | 101.802ms |
+이번 결과의 핵심은 특정 최적화 기법을 적용한 것 자체가 아니라,
 
-### 2.1 동기 Readback + 단일 워커
+> **병목을 추정한 뒤 실제 데이터를 측정하고, 예상과 다른 결과가 나오자 다시 프로파일링하여 진짜 병목인 JPEG 압축을 찾아 구조적으로 분리한 과정**
 
-동기 방식에서는 직접 `glReadPixels` 내부 p50이 약 22.718ms였고 Readback 전체 p50은 24.459ms였다. 이 대기로 프레임 생성률이 약 34.857fps로 제한됐다.
+에 있다.
 
-JPEG p50은 25.186ms였지만 생성률이 단일 워커 처리 용량을 크게 넘지 않아 큐 대기 p50은 0.165ms, 큐 폐기는 0건이었다. 따라서 이 조건에서는 JPEG 워커보다 GPU Readback 동기화가 먼저 전체 입력률을 제한했다.
-
-### 2.2 PBO 비동기 Readback + 단일 워커
-
-PBO를 적용하자 Readback 전체 p50은 24.459ms에서 20.728ms로 15.26% 감소했고, 생성률은 34.857fps에서 38.892fps로 11.58% 증가했다.
-
-하지만 현재 PBO 구현은 명령 제출만 빠르다. PBO submit p50은 0.051ms지만 이전 PBO를 `glMapBufferRange`로 회수하는 데 p50 17.937ms가 걸렸다. 즉 GPU 대기가 제거된 것이 아니라 `glReadPixels`에서 PBO map으로 상당 부분 이동했다.
-
-생성률이 증가하면서 단일 JPEG 워커의 처리 용량을 넘어섰다. 인코딩 큐 대기 p50이 141.157ms까지 증가했고, 큐에 적재된 1,936프레임 중 297프레임이 폐기되어 폐기율은 15.33%였다. 최종 처리량은 오히려 32.889fps로 낮아졌다.
-
-이 단계의 의미는 PBO만으로 전체 성능이 개선됐다는 것이 아니다. Readback이 일부 개선되면서 기존에 가려져 있던 JPEG 단일 워커 병목이 드러난 것이다.
-
-### 2.3 PBO 비동기 Readback + 멀티워커
-
-PBO 조건에서 JPEG 워커를 1개에서 4개로 늘리자 최종 처리량은 32.889fps에서 37.328fps로 13.50% 높아졌다. 큐 대기 p50은 141.157ms에서 0.073ms로 99.95% 감소했고, 큐 폐기는 297건에서 0건으로 줄었다.
-
-다만 JPEG 한 프레임의 압축시간은 27.601ms에서 28.403ms로 줄지 않았다. 멀티워커는 개별 압축을 가속한 것이 아니라 여러 프레임을 병렬 처리해 파이프라인의 JPEG 처리 용량을 높였다.
-
-### 최초 조건과 최종 조건 비교
-
-| 지표 | 동기+worker1 | PBO+worker4 | 변화 |
-|---|---:|---:|---:|
-| 생성률 | 34.857fps | 37.348fps | 7.15% 높음 |
-| 최종 처리량 | 34.857fps | 37.328fps | 7.09% 높음 |
-| Readback p50 | 24.459ms | 20.680ms | 15.45% 짧음 |
-| 큐 폐기율 | 0% | 0% | 동일 |
-| 종단간 p50 | 73.382ms | 101.802ms | 38.73% 길음 |
-| 평균 CPU | 187.99% | 233.59% | 24.26% 높음 |
-
-이 결과는 처리량과 지연이 서로 다른 최적화 목표임을 보여준다. 최종 구성은 처리량을 높이고 PBO 적용 후의 JPEG 적체를 제거했지만, PBO의 한 프레임 파이프라인 지연과 map 대기로 종단간 지연 및 CPU 사용량은 증가했다.
-
-따라서 멀티스레딩은 최초 병목에 대한 근본 해결책이 아니었다. Readback 개선으로 입력률이 높아진 뒤 발생한 JPEG 백프레셔를 해소하는 보완책이었다.
-
-## 3. 한계점 및 개선 방안
-
-### 측정 및 결과의 한계
-
-- 조건별 1회만 실행해 반복 변동성과 실행 순서 영향을 분리하지 못했다.
-- localhost TCP를 사용했으므로 실제 네트워크 지연, 패킷 손실 및 대역폭 제한은 반영하지 않았다.
-- 카메라 한 대만 측정했으므로 여러 카메라를 동시에 전송할 수 있는 최대 개수를 판단할 수 없다.
-- CPU에서 관찰한 OpenGL 호출시간이므로 순수 GPU 복사시간과 드라이버 대기시간을 분리하지 못했다.
-- PBO 실행 종료 시 파이프라인에 worker1은 2프레임, worker4는 1프레임이 남았다.
-- PBO와 멀티워커를 모두 변경한 최초·최종 비교만으로 각 변경의 독립적인 인과관계를 설명해서는 안 된다. 중간 조건을 함께 봐야 한다.
-
-### 구현의 한계
-
-현재 PBO 구현은 두 버퍼를 번갈아 사용하고 다음 프레임에서 이전 버퍼를 바로 map한다. GPU 복사가 아직 끝나지 않았다면 `glMapBufferRange`가 블로킹되므로 비동기 제출의 이점을 충분히 활용하지 못한다.
-
-또한 GPU의 RGBA 프레임을 CPU 메모리로 복사한 후 CPU JPEG 인코더에 전달하므로, 카메라 수가 증가하면 렌더링·Readback 대역폭·메모리 복사·JPEG 처리량이 모두 증가한다.
-
-### 개선 방향
-
-1. PBO ring을 3개 이상으로 늘리고 `glFenceSync`로 완료 여부를 확인한다.
-2. 아직 준비되지 않은 PBO를 즉시 map하지 않고 충분히 오래된 완료 버퍼만 회수한다.
-3. 여러 카메라는 Readback 명령을 먼저 제출한 뒤 완료된 결과를 나중에 회수해 GPU 복사와 렌더링을 중첩한다.
-4. 저지연이 중요하면 PBO 파이프라인 깊이와 처리량 사이의 절충을 별도로 측정한다.
-5. 여러 카메라 지원이 목표라면 1·2·4대의 실제 1232×832 카메라로 카메라별 생성·송신·수신 FPS와 폐기율을 측정한다.
-6. 가능하다면 GPU 텍스처를 CPU RGBA로 Readback하지 않고 하드웨어 인코더에 직접 전달하는 경로를 검토한다.
-7. JPEG가 다시 병목이 되는 조건에서만 워커 수를 조정하고 CPU 사용량과 지연을 함께 비교한다.
-
-## 결론
-
-이번 탐색 측정에서 최초 동기+단일 워커 구성은 Readback 대기로 입력률이 제한됐고, PBO 적용은 Readback 시간을 일부 줄였지만 PBO map 대기를 제거하지 못했다. 높아진 입력률은 단일 JPEG 워커의 큐 적체와 폐기를 발생시켰으며, 4개 워커는 이 2차 병목을 해소했다.
-
-따라서 현재 결과의 핵심은 단순히 “멀티스레딩으로 성능을 개선했다”가 아니다. 실제 종단간 경로를 계측해 GPU Readback 병목, 병목 이동, JPEG 백프레셔를 구분했고, 멀티워커가 필요한 조건과 그 대가인 CPU·지연 증가를 확인했다는 점이다.
+현재 60 FPS 송신 목표에는 도달하지 못했으므로 향후 최적화 대상은 PBO보다 **JPEG 인코더 처리량, 불필요한 CPU 메모리 복사, worker 4개 처리 구조**가 우선이다.
