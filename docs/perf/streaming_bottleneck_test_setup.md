@@ -1,43 +1,23 @@
-# Streaming Bottleneck Test Environment (RobotPal)
+# Streaming Bottleneck Test Environment
 
-This document explains how to reproduce the streaming bottleneck benchmark environment used to compare frame-drop behavior before and after pipeline separation.
+> **Supplemental benchmark only**
+>
+> 현재 RobotPal 카메라 스트리밍 성능의 공식 수치와 해석은 [../streaming-performance-result.md](../streaming-performance-result.md)를 사용한다. 이 문서는 JPEG/producer-consumer 구조를 별도로 압박하는 마이크로벤치마크의 실행 방법을 설명하기 위한 보조 문서이며, 여기서 얻은 수치를 실제 1232×832 애플리케이션의 성과로 사용하지 않는다.
 
-## 1) Goal
+## 1. 목적
 
-Measure frame-drop rate under a controlled streaming load where these hot paths are exercised:
+`tests/streaming_frame_drop_benchmark.cpp`는 실제 렌더링·GPU Readback을 포함하지 않고 다음 CPU 처리 구간을 독립적으로 압박한다.
 
-- RGBA -> RGB conversion
-- JPEG encoding (`CreateJpegEncoder` / libjpeg)
-- Producer/consumer queue pressure
-- Single worker (before) vs multi worker (after)
+- RGBA → RGB conversion
+- JPEG encoding
+- producer/consumer queue pressure
+- single worker와 multi worker 비교
 
-Benchmark source:
+따라서 이 벤치마크는 JPEG 처리 구조의 상대적인 특성을 확인하는 용도다. 최종 Simulation FPS나 Camera Send FPS를 대체하지 않는다.
 
-- `tests/streaming_frame_drop_benchmark.cpp`
+## 2. 빌드
 
----
-
-## 2) Test Host Requirements
-
-### OS / Toolchain
-
-- Linux/macOS/Windows (with a C++17 compiler)
-- `g++` or `clang++`
-- pthread support
-- `libjpeg` development package
-
-### Suggested package install (Ubuntu/Debian)
-
-```bash
-sudo apt-get update
-sudo apt-get install -y build-essential libjpeg-dev
-```
-
----
-
-## 3) Build Command
-
-From repository root:
+C++17, pthread, libjpeg 개발 환경이 필요하다.
 
 ```bash
 c++ -O2 -std=c++17 \
@@ -47,76 +27,22 @@ c++ -O2 -std=c++17 \
   -o tests/streaming_frame_drop_benchmark
 ```
 
----
-
-## 4) Runtime Parameters
-
-The benchmark accepts the following arguments:
+## 3. 실행 형식
 
 ```text
 ./tests/streaming_frame_drop_benchmark \
   <width> <height> <input_fps> <duration_sec> [quality] [queue_size]
 ```
 
-- `width`, `height`: frame resolution
-- `input_fps`: producer target FPS
-- `duration_sec`: benchmark duration in seconds
-- `quality` (optional, default 70): JPEG quality
-- `queue_size` (optional, default 6): bounded queue size (drop-oldest policy when full)
+비교 시 worker 전략 외의 입력 조건은 동일하게 유지한다.
 
----
+## 4. 결과 해석
 
-## 5) Baseline Scenario Used for Bottleneck Check
+이 마이크로벤치마크에서 관찰한 drop rate나 worker 처리량은 실제 애플리케이션의 최신 성과값과 분리한다.
 
-Requested scenario:
+최신 end-to-end 실험은 **1232×832**, Streaming OFF/ON 각 **5회**, median 기준으로 Sync / PBO / PBO+4 Worker 구조를 비교했다. 그 결과 실제 주요 병목은 초기 예상과 달리 GPU Readback이 아니라 **main-thread JPEG compression**이었고, JPEG를 simulation critical path에서 분리했을 때 Simulation FPS ON과 Camera Send FPS가 개선됐다.
 
-- Resolution: `1632 x 1232`
-- Duration: `30 sec`
-- Input FPS: `60`
-- JPEG quality: `70`
-- Queue size: `6`
-
-Run:
-
-```bash
-./tests/streaming_frame_drop_benchmark 1632 1232 60 30 70 6
-```
-
-Output includes:
-
-- `before(single-worker)`
-- `after(multi-worker)`
-- produced / processed / dropped
-- drop_rate / input_fps / output_fps / elapsed
-
----
-
-## 6) Metric Definition
-
-### Frame drop rate
-
-```text
-drop_rate = dropped / produced * 100
-```
-
-This benchmark models real-time pressure by dropping oldest queued frames when the bounded queue is full.
-
-### Before vs After meaning
-
-- **before(single-worker)**: one encoding worker (represents old bottleneck-prone path)
-- **after(multi-worker)**: multiple encoding workers (represents separated/asynchronous pipeline)
-
----
-
-## 7) Reproducibility Notes
-
-- Results vary by CPU core count, memory bandwidth, and libjpeg implementation.
-- Compare **relative improvement (before vs after)** on the same machine.
-- For fair comparison, keep all arguments identical except worker strategy.
-
----
-
-## 8) Cleanup
+## 5. Cleanup
 
 ```bash
 rm -f tests/streaming_frame_drop_benchmark
