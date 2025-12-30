@@ -29,6 +29,14 @@ static StreamingThreadConfig GetStreamingThreadConfig() {
         return {1};
     #endif
 #else
+    // Optional override for A/B benchmarking.
+    if (const char* forced = std::getenv("ROBOTPAL_ENCODE_WORKERS")) {
+        const int parsed = std::atoi(forced);
+        if (parsed > 0) {
+            return {static_cast<unsigned>(parsed)};
+        }
+    }
+
     // Native TCP
     return {4};
 #endif
@@ -231,3 +239,4 @@ void StreamingPipeline::EncodeWorkerLoop() {
         }
     }
 }
+

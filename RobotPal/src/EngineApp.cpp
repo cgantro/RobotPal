@@ -81,6 +81,8 @@ void EngineApp::MainLoop()
     const double benchmarkStart = glfwGetTime();
     //glm::vec4 clear_color = {0.45f, 0.55f, 0.60f, 1.00f};
     glm::vec4 clear_color = {0.1f, 0.1f, 0.1f, 1.00f};
+    uint64_t fpsFrames = 0;
+    float fpsElapsed = 0.0f;
 
     RenderCommand::Init(); 
 #ifdef __EMSCRIPTEN__
@@ -139,6 +141,15 @@ void EngineApp::MainLoop()
         ImGuiManager::Get().Render(m_Window->GetNativeWindow());
         
         m_Window->SwapBuffers();
+
+        fpsFrames++;
+        fpsElapsed += dt;
+        if (fpsElapsed >= 1.0f) {
+            const float appFps = static_cast<float>(fpsFrames) / fpsElapsed;
+            std::cout << "[APP FPS] " << appFps << std::endl;
+            fpsFrames = 0;
+            fpsElapsed = 0.0f;
+        }
     }
 #ifdef __EMSCRIPTEN__
     EMSCRIPTEN_MAINLOOP_END;
@@ -153,3 +164,4 @@ void EngineApp::Shutdown()
     ImGuiManager::Get().Shutdown();
     m_Window->Shutdown();
 }
+
