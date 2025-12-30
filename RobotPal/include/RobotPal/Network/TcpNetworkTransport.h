@@ -1,6 +1,6 @@
 #pragma once
 #include "RobotPal/Network/NetworkTransport.h"
-#include "RobotPal/Network/NetworkQueue.h" // 기존 큐 재사용
+#include "RobotPal/Network/TcpSendQueue.h"
 #include <thread>
 #include <atomic>
 #include <vector>
@@ -36,6 +36,7 @@ public:
     bool Connect(const std::string& url) override;
     void Disconnect() override;
     void Send(const std::vector<uint8_t>& data) override;
+    void Send(const std::vector<uint8_t>& data, uint32_t frameId) override;
     bool IsConnected() const override { return m_IsConnected; }
 
 private:
@@ -56,7 +57,8 @@ private:
     std::thread m_RecvThread;
     std::thread m_SendThread;
 
-    NetworkQueue m_SendQueue; 
+    TcpSendQueue m_SendQueue;
+    std::atomic<uint32_t> m_UnframedSequence{0};
 };
 
 #endif

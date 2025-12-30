@@ -234,7 +234,7 @@ void StreamingPipeline::EncodeWorkerLoop() {
             // NetworkEngine::SendPacket은 const std::vector&를 받으므로 
             // 복사가 발생하지만, 여기서 packet 인스턴스 자체는 유지되어 
             // 다음 루프에서 재사용됨.
-            m_networkEngine->SendPacket(packet);
+            m_networkEngine->SendPacket(packet, job.frameId);
             robotpal::benchmark::Event("send_queued", job.frameId, 0, packet.size());
         }
     }

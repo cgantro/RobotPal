@@ -62,3 +62,9 @@ std::optional<Packet> NetworkEngine::GetPacket()
 {
     return m_RecvQueue.TryPop();
 }
+
+void NetworkEngine::SendPacket(const std::vector<uint8_t> &rawData, uint32_t frameId)
+{
+    if (m_Transport && m_Transport->IsConnected())
+        m_Transport->Send(rawData, frameId);
+}
