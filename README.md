@@ -101,9 +101,28 @@ python -m http.server
 
 Contributions are always welcome! If you would like to contribute to RobotPal, please fork the repository and create a pull request. You can also open an issue to report bugs or suggest new features.
 
+## Performance Benchmark Guide
+
+For a reproducible streaming bottleneck test setup, see `docs/perf/streaming_bottleneck_test_setup.md`.
+
 ## License
 
 This project is licensed under the MIT License. See the `LICENSE` file for more details.
+
+## Performance Note: PBO-based Asynchronous Readback
+
+When sending rendered frames over network streaming, one expensive step is reading pixel data from GPU memory back to CPU memory (`glReadPixels`).
+
+- **Synchronous readback (direct pointer):** CPU may block until GPU rendering finishes.
+- **PBO readback (pixel pack buffer):** GPU writes into a buffer object first, and CPU maps a previously written buffer in the next frame.
+
+In RobotPal, the desktop path uses **double-buffered PBO ping-pong** in `Texture::GetAsyncData`.
+
+1. Frame N: issue `glReadPixels(..., 0)` to `PBO[writeIndex]` (GPU-side write request)
+2. Frame N: map `PBO[readIndex]` and copy previous frame data on CPU
+3. Swap indices and repeat
+
+This does not remove all stalls, but it typically reduces CPU-GPU synchronization pressure versus immediate readback.
 
 ---
 
@@ -210,7 +229,26 @@ python -m http.server
 
 기여는 언제나 환영입니다! RobotPal에 기여하고 싶다면, 저장소를 포크(fork)하고 풀 리퀘스트(pull request)를 생성해주세요. 또한 버그를 보고하거나 새로운 기능을 제안하기 위해 이슈(issue)를 열 수도 있습니다.
 
+## 성능 벤치마크 가이드
+
+스트리밍 병목 테스트 환경 재현 방법은 `docs/perf/streaming_bottleneck_test_setup.md`를 참고하세요.
+
 ## 라이선스
 
 이 프로젝트는 MIT 라이선스를 따릅니다. 자세한 내용은 `LICENSE` 파일을 참고하세요.
+
+## 성능 노트: PBO 기반 비동기 Readback
+
+렌더링된 프레임을 네트워크 스트리밍으로 보낼 때, 비용이 큰 구간 중 하나가 GPU 메모리의 픽셀 데이터를 CPU 메모리로 가져오는 과정(`glReadPixels`)입니다.
+
+- **동기 readback(직접 포인터):** GPU 렌더링 완료까지 CPU가 기다리며 멈출 수 있습니다.
+- **PBO readback(Pixel Pack Buffer):** GPU가 먼저 버퍼 객체에 쓰고, CPU는 다음 프레임에 이전 버퍼를 매핑해서 읽습니다.
+
+RobotPal 데스크톱 경로는 `Texture::GetAsyncData`에서 **PBO 2개를 번갈아 쓰는 ping-pong 구조**를 사용합니다.
+
+1. 프레임 N: `PBO[writeIndex]`에 `glReadPixels(..., 0)` 요청 (GPU 쓰기)
+2. 프레임 N: `PBO[readIndex]`를 CPU에서 매핑해 이전 프레임 데이터 읽기
+3. 인덱스를 교체하며 반복
+
+이 방식이 모든 stall을 없애지는 않지만, 즉시 readback보다 CPU-GPU 동기화 부담을 줄이는 데 도움이 됩니다.
 
