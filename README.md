@@ -105,6 +105,10 @@ Contributions are always welcome! If you would like to contribute to RobotPal, p
 
 For a reproducible streaming bottleneck test setup, see `docs/perf/streaming_bottleneck_test_setup.md`.
 
+## Contributing
+
+Contributions are always welcome! If you would like to contribute to RobotPal, please fork the repository and create a pull request. You can also open an issue to report bugs or suggest new features.
+
 ## License
 
 This project is licensed under the MIT License. See the `LICENSE` file for more details.
@@ -228,10 +232,6 @@ python -m http.server
 ## 기여하기
 
 기여는 언제나 환영입니다! RobotPal에 기여하고 싶다면, 저장소를 포크(fork)하고 풀 리퀘스트(pull request)를 생성해주세요. 또한 버그를 보고하거나 새로운 기능을 제안하기 위해 이슈(issue)를 열 수도 있습니다.
-
-## 성능 벤치마크 가이드
-
-스트리밍 병목 테스트 환경 재현 방법은 `docs/perf/streaming_bottleneck_test_setup.md`를 참고하세요.
 
 ## 라이선스
 
