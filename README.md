@@ -101,6 +101,14 @@ python -m http.server
 
 Contributions are always welcome! If you would like to contribute to RobotPal, please fork the repository and create a pull request. You can also open an issue to report bugs or suggest new features.
 
+## Performance Benchmark Guide
+
+For a reproducible streaming bottleneck test setup, see `docs/perf/streaming_bottleneck_test_setup.md`.
+
+## Contributing
+
+Contributions are always welcome! If you would like to contribute to RobotPal, please fork the repository and create a pull request. You can also open an issue to report bugs or suggest new features.
+
 ## License
 
 This project is licensed under the MIT License. See the `LICENSE` file for more details.
