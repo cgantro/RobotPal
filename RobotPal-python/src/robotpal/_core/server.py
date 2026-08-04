@@ -5,6 +5,8 @@ import cv2
 import numpy as np
 import json
 import struct
+import os
+import time
 import traitlets
 import os
 import time
@@ -44,9 +46,19 @@ class SimulatorServer(SingletonConfigurable):
             self._benchmark_stream = open(benchmark_path, "w", encoding="utf-8", buffering=1)
 
         self.motor_states = {1: 0.0, 2: 0.0}
+
+        mode = os.getenv("ROBOTPAL_STREAM_MODE", "multi").strip().lower()
+        self.stream_mode = "single" if mode == "single" else "multi"
         
         # [최적화] 디코딩 전용 스레드 풀
         self.executor = ThreadPoolExecutor(max_workers=4)
+
+        # Runtime metrics (1s report)
+        self._metrics_start_ts = time.perf_counter()
+        self._last_report_ts = self._metrics_start_ts
+        self._rx_frames = 0
+        self._decode_ok_frames = 0
+        self._jpeg_updates = 0
 
         self._start()
 
@@ -118,7 +130,7 @@ class SimulatorServer(SingletonConfigurable):
     # [2] WebSocket: Processor (ISP 로직 적용)
     # ==========================================================
     async def _websocket_processor(self):
-        print("[System] WebSocket 프로세서 시작")
+        print(f"[System] WebSocket 프로세서 시작 | mode={self.stream_mode}")
         loop = asyncio.get_running_loop()
 
         while True:
@@ -132,6 +144,7 @@ class SimulatorServer(SingletonConfigurable):
 
                 # [최적화 A] 화면 표시용: 원본 JPEG 즉시 업데이트 (디코딩 X)
                 self.latest_jpeg = bytes(jpeg_data)
+                self._jpeg_updates += 1
 
                 # [최적화 B] AI용: 백그라운드 스레드에서 리사이즈 수행
                 process_start = time.perf_counter_ns()
@@ -172,6 +185,7 @@ class SimulatorServer(SingletonConfigurable):
                     
                     # [최적화 A]
                     self.latest_jpeg = bytes(frame_data)
+                    self._jpeg_updates += 1
                     
                     # [최적화 B]
                     process_start = time.perf_counter_ns()
@@ -187,6 +201,7 @@ class SimulatorServer(SingletonConfigurable):
                                               reason="decode", generated_unix_ns=generated_ns)
 
                     buffer = buffer[4 + msg_size:]
+                    self._report_metrics_if_needed()
         except: pass
         finally:
             self.active_tcp_writer = None
@@ -208,6 +223,25 @@ class SimulatorServer(SingletonConfigurable):
                 return cv2.resize(flipped, (224, 224), interpolation=cv2.INTER_LINEAR)
         except: pass
         return None
+
+    def _report_metrics_if_needed(self):
+        now = time.perf_counter()
+        elapsed = now - self._last_report_ts
+        if elapsed < 1.0:
+            return
+
+        total_elapsed = now - self._metrics_start_ts
+        rx_fps = self._rx_frames / total_elapsed if total_elapsed > 0 else 0.0
+        dec_fps = self._decode_ok_frames / total_elapsed if total_elapsed > 0 else 0.0
+        jpeg_fps = self._jpeg_updates / total_elapsed if total_elapsed > 0 else 0.0
+
+        print(
+            f"[STREAM METRIC] mode={self.stream_mode} "
+            f"elapsed={total_elapsed:.1f}s "
+            f"rx_fps={rx_fps:.2f} decode_fps={dec_fps:.2f} jpeg_fps={jpeg_fps:.2f} "
+            f"rx_total={self._rx_frames} decode_total={self._decode_ok_frames}"
+        )
+        self._last_report_ts = now
 
     # ==========================================================
     # [5] 명령 전송
@@ -252,3 +286,4 @@ if __name__ == "__main__":
         pass
     finally:
         cv2.destroyAllWindows()
+
