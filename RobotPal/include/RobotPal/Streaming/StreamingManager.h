@@ -1,27 +1,43 @@
 #pragma once
+
 #include "RobotPal/Streaming/IStreamingManager.h"
 #include "RobotPal/Network/INetworkTransport.h"
+
 #include <flecs.h>
-#include <memory>
-#include <vector>
+
+#include <atomic>
+#include <condition_variable>
 #include <functional>
+#include <mutex>
+#include <queue>
+#include <thread>
+#include <vector>
 
 class StreamingManager : public IStreamingManager
 {
 public:
-    StreamingManager(flecs::world& world);
-    virtual ~StreamingManager();
+    explicit StreamingManager(flecs::world& world);
+    ~StreamingManager() override;
 
     void Init() override;
     void Shutdown() override;
-
-    // [삭제] Connect/Disconnect 오버라이드 제거
-
     void SendFrame(const FrameData& frame) override;
+
 private:
-    flecs::world& m_World;
     struct WriteContext {
         std::vector<uint8_t> buffer;
     };
+
+    void EncodeWorkerLoop();
     static void write_func(void* ctx, void* data, int size);
+
+private:
+    flecs::world& m_World;
+    NetworkEngine* m_NetworkEngine = nullptr;
+
+    std::atomic<bool> m_Running{false};
+    std::mutex m_QueueMutex;
+    std::condition_variable m_QueueCv;
+    std::queue<FrameData> m_EncodeQueue;
+    std::vector<std::thread> m_EncodeWorkers;
 };

@@ -1,40 +1,50 @@
-# Streaming performance stage: PBO only
+# Streaming performance stage: PBO + multithreaded JPEG
 
 ## Purpose
 
-This branch isolates the first optimization stage: PBO double-buffered GPU readback, while JPEG encoding remains synchronous on the caller/main update path.
+This branch is the third controlled stage in the RobotPal camera-streaming comparison.
 
-Base application state: `2dc99a37` ("TCP Stream Test Complete", 2025-12-04).
+It is derived directly from `perf/streaming-pbo`, so the PBO readback code, historical camera setup, JPEG implementation, JPEG quality, and profiling toolchain are unchanged. The added variable is streaming JPEG work being moved off the caller/main update path to a fixed worker pool.
 
-The application structure, historical stb_image_write JPEG path, quality 85, and 400 x 400 camera framebuffer are intentionally kept aligned with `perf/streaming-baseline-sync`. The relevant difference is the historical PBO ping-pong readback implementation.
-
-This branch is not a runtime feature toggle.
+This branch is not a runtime multithreading toggle.
 
 ## Stage definition
 
 - Camera streaming: enabled
-- GPU readback: PBO ping-pong / double buffering
-- Streaming JPEG worker threads: none
-- JPEG: historical stb_image_write path, quality 85
+- GPU readback: same PBO ping-pong implementation as `perf/streaming-pbo`
+- JPEG: same historical stb_image_write path, quality 85
+- Streaming JPEG workers: 4
+- Queue: simple FIFO work queue
+- Drop policy: none
 - Camera framebuffer: historical 400 x 400 setup
-- NetworkEngine I/O threads: preserved as part of the original completed networking implementation
+- NetworkEngine I/O threads: unchanged from the historical completed implementation
+
+No bounded-queue/drop-oldest policy or later libjpeg-turbo change is added here, because those would introduce additional variables into the PBO + multithreading comparison.
 
 ## Measurement policy
 
-Whole-application performance is measured externally with **PresentMon**.
-
-Only two headline metrics are retained:
+The final whole-application comparison uses **PresentMon** only for the headline metrics:
 
 1. App FPS
 2. Frame Time p95
 
-Run the same scenario three times and report the median. Do not use an internal FPS counter or manual `std::chrono` accumulator as the final result.
+Run each branch three times under the same scene, GPU, window, build mode, warm-up, and measurement duration. Use the median result.
 
-**Tracy** is diagnostic only. Use it to inspect the `Frame`, `Streaming.Readback.PBO`, `Streaming.SendFrame`, and `Streaming.JPEG` zones. Tracy-enabled runs are not the headline PresentMon runs.
+Do not use internal FPS counters, receiver FPS, or manual `std::chrono` statistics as headline data.
 
-**Google Benchmark** is optional and isolated. The included JPEG benchmark is a control for the same historical 400 x 400 Q85 JPEG path; it is not RobotPal FPS.
+**Tracy** is diagnostic. Compare the timeline against the previous two branches:
 
-Receiver/sink FPS is intentionally excluded.
+- `Frame`
+- `Streaming.Readback.PBO`
+- `Streaming.Enqueue`
+- `Streaming.WorkerJob`
+- `Streaming.JPEG`
+- thread `Main / Render`
+- threads `Streaming JPEG Worker`
+
+The expected structural change is not assumed to be faster in advance; verify that JPEG work actually leaves the main/update path and whether App FPS / Frame Time improve.
+
+**Google Benchmark** remains an isolated control for the same 400 x 400 Q85 JPEG code path. It is not application FPS.
 
 ## Build modes
 
@@ -44,8 +54,6 @@ Receiver/sink FPS is intentionally excluded.
 cmake -S . -B build-presentmon -DCMAKE_BUILD_TYPE=Release -DROBOTPAL_ENABLE_TRACY=OFF -DROBOTPAL_BUILD_MICROBENCHMARKS=OFF
 cmake --build build-presentmon --config Release
 ```
-
-Run RobotPal under PresentMon, filter to `RobotPal.exe`, and keep the scene, window, GPU, and run duration identical to the other branches.
 
 ### Tracy diagnosis build
 
@@ -61,10 +69,21 @@ cmake -S . -B build-bench -DCMAKE_BUILD_TYPE=Release -DROBOTPAL_BUILD_MICROBENCH
 cmake --build build-bench --config Release --target RobotPalJpegBenchmark
 ```
 
-## Comparison rule
+## Comparison sequence
 
-Compare against:
-- `perf/streaming-baseline-sync`: same completed streaming structure, synchronous readback
-- `perf/streaming-pbo-mt`: same PBO stage plus streaming JPEG worker threads
+```text
+perf/streaming-baseline-sync
+  synchronous glReadPixels + synchronous JPEG
 
-The PBO effect should be attributed from the baseline -> this branch comparison, not from the old 2026 ablation benchmark.
+        -> PBO only
+
+perf/streaming-pbo
+  PBO ping-pong + synchronous JPEG
+
+        -> streaming multithreading only
+
+perf/streaming-pbo-mt
+  PBO ping-pong + 4 JPEG workers
+```
+
+This three-branch sequence is the controlled performance comparison. The later 2026 benchmark harness remains a separate ablation experiment and must not be presented as the historical initial-to-final result.
