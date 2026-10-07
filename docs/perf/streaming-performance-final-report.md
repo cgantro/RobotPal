@@ -4,7 +4,7 @@
 
 ## 1. Problem
 
-RobotPal camera streaming was completed end-to-end at commit `2dc99a37` (2025-12-04). The objective of this experiment is to measure how the simulation application's frame performance changes when GPU readback and JPEG processing are optimized in controlled stages.
+RobotPal camera streaming was completed end-to-end at commit `2dc99a37` (2025-12-04). The camera framebuffer is fixed at **1232 x 832** because that resolution was selected to preserve reliable JETANK license-plate recognition quality. The objective is therefore to improve the simulation application's frame performance **without reducing image resolution**, by optimizing the GPU readback and JPEG processing path in controlled stages.
 
 The repository history already contained PBO readback before the first completed streaming commit. Therefore the no-PBO baseline is a reconstruction of `2dc99a37`: the application and streaming structure are preserved while only readback is restored to synchronous `glReadPixels`.
 
@@ -40,13 +40,14 @@ Fill only what is necessary:
 - GPU:
 - OS:
 - Build: Release
-- Camera framebuffer: 1232 x 832
+- Camera framebuffer: 1232 x 832 (fixed for license-plate recognition quality)
+- FPS cap: none
 - JPEG quality: 85
 - Warm-up:
 - Measurement duration:
 - Repetitions: 3 per branch
 
-Keep scene, window size, GPU selection, camera state, and workload identical.
+Keep scene, window size, GPU selection, camera state, and workload identical. Do not lower camera resolution or introduce an FPS cap to improve benchmark results.
 
 ## 5. Whole-application results
 
