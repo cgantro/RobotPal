@@ -16,6 +16,7 @@
 #include <glad/gles2.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
+#include <cstdlib>
 #include <memory>
 
 
@@ -28,8 +29,19 @@ void SandboxScene::OnEnter()
 
     auto networkEngine = m_World.get_mut<NetworkEngineHandle>();
     networkEngine.instance->Connect("127.0.0.1:9998");
-    m_StreamingManager = IStreamingManager::Create(m_World);
-    m_StreamingManager->Init();
+
+    // Benchmark mode:
+    // ROBOTPAL_STREAMING=0 -> camera streaming OFF
+    // unset / any other value -> camera streaming ON
+    // Networking itself remains available so only the camera streaming workload changes.
+    const char* streamingEnv = std::getenv("ROBOTPAL_STREAMING");
+    m_StreamingEnabled = !(streamingEnv && streamingEnv[0] == '0' && streamingEnv[1] == '\0');
+
+    if (m_StreamingEnabled)
+    {
+        m_StreamingManager = IStreamingManager::Create(m_World);
+        m_StreamingManager->Init();
+    }
     
     auto hdrID = AssetManager::Get().LoadTextureHDR("./Assets/airport.hdr");
     m_World.set<Skybox>({hdrID, 1.0f, 0.0f});
@@ -105,7 +117,7 @@ void SandboxScene::OnUpdate(float dt)
     m_StreamFrameAccumulator += dt;
     const float streamInterval = 1.0f / kCameraStreamFpsCap;
 
-    if (m_StreamingManager && m_StreamFrameAccumulator >= streamInterval)
+    if (m_StreamingEnabled && m_StreamingManager && m_StreamFrameAccumulator >= streamInterval)
     {
         m_StreamFrameAccumulator -= streamInterval;
         if (m_StreamFrameAccumulator > streamInterval)
