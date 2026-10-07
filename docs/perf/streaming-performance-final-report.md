@@ -32,7 +32,25 @@ NetworkEngine's historical I/O threads exist in all three branches and are not t
 
 Receiver/sink FPS and manual `std::chrono` benchmark statistics are excluded from the headline comparison.
 
-## 4. Test environment
+## 4. Streaming ON/OFF procedure
+
+Each branch is measured in two states.
+
+```powershell
+# Streaming OFF
+$env:ROBOTPAL_STREAMING="0"
+.\RobotPal.exe
+
+# Streaming ON
+$env:ROBOTPAL_STREAMING="1"
+.\RobotPal.exe
+```
+
+Streaming OFF skips camera readback, JPEG encode, and streaming-worker initialization. NetworkEngine remains available so the comparison isolates the camera-streaming workload.
+
+Run each state three times and use the median Simulation FPS. Camera Streaming Send FPS is measured only in the ON state.
+
+## 5. Test environment
 
 Fill only what is necessary:
 
@@ -50,28 +68,31 @@ Fill only what is necessary:
 
 Keep scene, window size, GPU selection, camera state, and workload identical. Do not lower camera resolution. The only FPS cap is the fixed 60 FPS camera-stream target; the simulation/render loop must remain uncapped.
 
-## 5. Performance results
+## 6. Performance results
 
 Use three repeated runs per branch and report the median.
 
-| Stage | Camera Streaming Send FPS | Simulation FPS |
-| --- | ---: | ---: |
-| Synchronous baseline | TBD / 60 | TBD |
-| PBO | TBD / 60 | TBD |
-| PBO + multithreading | TBD / 60 | TBD |
+| Stage | Simulation FPS (Streaming OFF) | Simulation FPS (Streaming ON) | Streaming Penalty | Camera Streaming Send FPS (ON) |
+| --- | ---: | ---: | ---: | ---: |
+| Synchronous baseline | TBD | TBD | TBD % | TBD / 60 |
+| PBO | TBD | TBD | TBD % | TBD / 60 |
+| PBO + multithreading | TBD | TBD | TBD % | TBD / 60 |
 
 ### Success criteria
 
+- **Streaming OFF Simulation FPS** establishes the branch's application baseline.
+- **Streaming ON Simulation FPS** shows the real cost of camera streaming on the simulation.
+- **Streaming Penalty (%) = (OFF FPS - ON FPS) / OFF FPS × 100** quantifies that cost.
 - Camera streaming should sustain as close to the **60 FPS camera target** as possible without exceeding it.
-- Simulation FPS should recover as readback and JPEG work are removed from the simulation/render path.
+- As PBO and worker separation are applied, the goal is to reduce Streaming Penalty while approaching the 60 FPS send target.
 - Receiver/decode FPS is not part of this experiment.
 - Frame-time percentiles may be retained only as secondary diagnostic evidence.
 
 Do not add more headline metrics unless they are required to explain an unexpected result.
 
-## 6. Tracy bottleneck evidence
+## 7. Tracy bottleneck evidence
 
-### 6.1 Synchronous baseline
+### 7.1 Synchronous baseline
 
 Capture:
 - `Frame`
@@ -82,7 +103,7 @@ Capture:
 Finding:
 - TBD
 
-### 6.2 PBO only
+### 7.2 PBO only
 
 Capture:
 - `Frame`
@@ -93,7 +114,7 @@ Capture:
 Finding:
 - TBD
 
-### 6.3 PBO + multithreading
+### 7.3 PBO + multithreading
 
 Capture:
 - `Frame`
@@ -108,7 +129,7 @@ Finding:
 
 The report should explain bottleneck movement, not merely list profiling zones.
 
-## 7. Optional JPEG microbenchmark
+## 8. Optional JPEG microbenchmark
 
 Only include this section if the Google Benchmark result helps explain the timeline.
 
@@ -118,14 +139,16 @@ Only include this section if the Google Benchmark result helps explain the timel
 
 This number represents isolated JPEG code-path cost and must not be described as RobotPal application performance.
 
-## 8. Conclusion
+## 9. Conclusion
 
 Write the final conclusion in this order:
 
-1. Whether the synchronous baseline can sustain the 60 FPS camera-stream target and what Simulation FPS it produces.
-2. Whether PBO improves Camera Streaming Send FPS and/or Simulation FPS by reducing readback stalls.
-3. Whether moving JPEG work to worker threads lets the stream sustain 60 FPS while recovering Simulation FPS.
-4. Any remaining bottleneck visible in Tracy.
+1. The Simulation FPS with Streaming OFF and ON for every branch.
+2. The resulting Streaming Penalty for every branch.
+3. Whether the synchronous baseline can sustain the 60 FPS camera-stream target.
+4. Whether PBO reduces the Streaming Penalty by reducing readback stalls.
+5. Whether moving JPEG work to worker threads further reduces the penalty while sustaining the 60 FPS send target.
+6. Any remaining bottleneck visible in Tracy.
 
 Do not claim an optimization worked unless both the profiler evidence and PresentMon result support that claim.
 
@@ -135,4 +158,4 @@ After measurement, write a 3-4 sentence summary using only the measured values.
 
 Recommended structure:
 
-> Camera streaming used the fixed 1232 x 832 resolution required for JETANK license-plate recognition and targeted the real-camera operating ceiling of 60 FPS. PresentMon and Tracy were used to measure Simulation FPS and completed Camera Streaming Send FPS while locating readback/JPEG bottlenecks. PBO readback and JPEG worker separation were applied in controlled stages, changing Camera Streaming Send FPS from [initial] to [final] and Simulation FPS from [initial] to [final]. These values are measurements from the stated test environment and are not a general performance guarantee.
+> Camera streaming used the fixed 1232 x 832 resolution required for JETANK license-plate recognition and targeted a 60 FPS real-camera operating ceiling. Each stage was measured with Streaming OFF and ON to quantify the simulation-side cost of camera streaming, while Tracy measured completed Camera Streaming Send FPS and exposed readback/JPEG bottlenecks. PBO readback and JPEG worker separation changed the streaming penalty from [initial penalty] to [final penalty] while Camera Streaming Send FPS changed from [initial] to [final]. These values are measurements from the stated test environment and are not a general performance guarantee.
