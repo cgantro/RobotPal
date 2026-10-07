@@ -23,7 +23,7 @@ This branch is not a runtime feature toggle.
 
 - Camera framebuffer is fixed at **1232 x 832** because this resolution was selected to preserve reliable JETANK license-plate recognition quality.
 - Resolution reduction is therefore **not** considered a valid performance optimization in this experiment.
-- Camera/streaming FPS is **not capped**. Each stage is allowed to process frames as fast as the simulation and streaming path can sustain.
+- Camera capture/streaming requests are capped at **60 FPS**, matching the practical stock Jetson Nano / IMX219 camera target. The simulation/render loop itself remains uncapped.
 - The optimization target is the transfer/processing path itself: GPU readback and JPEG execution, while keeping image resolution constant.
 
 ## Measurement policy
@@ -32,16 +32,16 @@ Whole-application performance is measured externally with **PresentMon**.
 
 Only two headline metrics are retained:
 
-1. App FPS
-2. Frame Time p95
+1. Camera Streaming Send FPS
+2. Simulation FPS
 
 Run the same scenario three times and report the median. Do not use an internal FPS counter or manual `std::chrono` accumulator as the final result.
 
-**Tracy** is diagnostic only. Use it to inspect the `Frame`, `Streaming.Readback.PBO`, `Streaming.SendFrame`, and `Streaming.JPEG` zones. Tracy-enabled runs are not the headline PresentMon runs.
+**Tracy** provides the camera-stream send-rate measurement through the named frame set `CameraStreamSend`, emitted only after a JPEG packet is submitted to `NetworkEngine`. It is also used for bottleneck diagnosis. Use it to inspect the `Frame`, `Streaming.Readback.PBO`, `Streaming.SendFrame`, and `Streaming.JPEG` zones. Tracy-enabled runs are not the headline PresentMon runs.
 
 **Google Benchmark** is optional and isolated. The included JPEG benchmark is a control for the same 1232 x 832 Q85 JPEG test path; it is not RobotPal FPS.
 
-Receiver/sink FPS is intentionally excluded.
+Receiver/sink FPS is intentionally excluded. Send FPS means frames successfully encoded and submitted by RobotPal to `NetworkEngine`, not receiver decode FPS.
 
 ## Build modes
 
