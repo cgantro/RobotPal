@@ -17,7 +17,7 @@ public:
 
     // [삭제] Connect/Disconnect 오버라이드 제거
 
-    void SendFrame(const FrameData& frame) override;
+    void SendFrame(FrameData frame) override;
 private:
     flecs::world& m_World;
     struct WriteContext {
