@@ -1,4 +1,5 @@
 #include "RobotPal/Core/Texture.h"
+#include "RobotPal/Util/Profiling.h"
 
 #include <cstring> // memcpy
 
@@ -105,6 +106,7 @@ void Texture::SetCubeMapData(const std::vector<void*>& faces) {
 // [핵심] PBO를 이용한 비동기 데이터 읽기 (Double Buffering)
 // ---------------------------------------------------------
 std::vector<uint8_t> Texture::GetAsyncData() {
+    RP_PROFILE_SCOPE("Streaming.Readback.PBO");
     if (m_Type != TextureType::Texture2D) return {}; // 큐브맵 등은 미지원
 
     // 1. PBO 지연 초기화 (필요할 때만 메모리 할당)

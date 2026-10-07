@@ -2,6 +2,7 @@
 #include "stb_image_write.h"
 #include "Robotpal/Components/Components.h"
 #include "RobotPal/Network/NetworkEngine.h"
+#include "RobotPal/Util/Profiling.h"
 
 #ifdef _WIN32
     #include <winsock2.h> // htonl용
@@ -27,16 +28,21 @@ void StreamingManager::Shutdown() {
 // [삭제] Connect/Disconnect 구현 제거
 
 void StreamingManager::SendFrame(const FrameData& frame) {
+    RP_PROFILE_SCOPE("Streaming.SendFrame");
     auto& handle = m_World.get_mut<NetworkEngineHandle>();
 
     WriteContext ctx;
     ctx.buffer.reserve(frame.width * frame.height);
 
-    int ok = stbi_write_jpg_to_func(
-        write_func, &ctx,
-        frame.width, frame.height, frame.channels,
-        frame.pixel_data.data(), 85
-    );
+    int ok = 0;
+    {
+        RP_PROFILE_SCOPE("Streaming.JPEG");
+        ok = stbi_write_jpg_to_func(
+            write_func, &ctx,
+            frame.width, frame.height, frame.channels,
+            frame.pixel_data.data(), 85
+        );
+    }
 
     if (!ok || ctx.buffer.empty()) return;
 

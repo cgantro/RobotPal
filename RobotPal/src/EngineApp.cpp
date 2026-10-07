@@ -22,6 +22,7 @@
 #include "RobotPal/Systems/RenderSystemModule.h"
 #include "RobotPal/Systems/TransformSystemModule.h"
 #include "RobotPal/Core/Texture.h"
+#include "RobotPal/Util/Profiling.h"
 void EngineApp::Run()
 {
     Init();

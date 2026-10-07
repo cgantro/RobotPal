@@ -220,3 +220,40 @@ else()
 endif()
 
 # TODO: 필요한 경우 테스트를 추가하고 대상을 설치합니다.
+
+# ==============================================================================
+# Performance tooling (profiling branches only)
+# ==============================================================================
+option(ROBOTPAL_ENABLE_TRACY "Enable Tracy instrumentation for bottleneck analysis" OFF)
+if(ROBOTPAL_ENABLE_TRACY AND NOT EMSCRIPTEN)
+    set(TRACY_ENABLE ON CACHE BOOL "" FORCE)
+    set(TRACY_ON_DEMAND OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+        tracy
+        GIT_REPOSITORY https://github.com/wolfpld/tracy.git
+        GIT_TAG v0.14.1
+        GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(tracy)
+    target_link_libraries(RobotPal PRIVATE Tracy::TracyClient)
+    target_compile_definitions(RobotPal PRIVATE ROBOTPAL_TRACY_ENABLED=1)
+endif()
+
+option(ROBOTPAL_BUILD_MICROBENCHMARKS "Build isolated Google Benchmark targets" OFF)
+if(ROBOTPAL_BUILD_MICROBENCHMARKS AND NOT EMSCRIPTEN)
+    set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+    set(BENCHMARK_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+        google_benchmark
+        GIT_REPOSITORY https://github.com/google/benchmark.git
+        GIT_TAG v1.9.5
+        GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(google_benchmark)
+
+    add_executable(RobotPalJpegBenchmark
+        ${CMAKE_SOURCE_DIR}/RobotPal/benchmarks/jpeg_benchmark.cpp
+    )
+    target_link_libraries(RobotPalJpegBenchmark PRIVATE benchmark::benchmark_main stb)
+    target_compile_features(RobotPalJpegBenchmark PRIVATE cxx_std_17)
+endif()
