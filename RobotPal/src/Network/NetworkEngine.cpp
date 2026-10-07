@@ -36,7 +36,6 @@ void NetworkEngine::SendPacket(const std::vector<uint8_t> &rawData)
 {
     if (!isRunning) return;
     m_SendQueue.Push(rawData);
-    Sleep(1);
 }
 
 std::optional<Packet> NetworkEngine::GetPacket()
