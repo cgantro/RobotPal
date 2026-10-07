@@ -55,6 +55,7 @@ void StreamingManager::SendFrame(const FrameData& frame) {
     packet.insert(packet.end(), ctx.buffer.begin(), ctx.buffer.end());
 
     handle.instance->SendPacket(packet);
+    RP_PROFILE_STREAM_FRAME();
 }
 
 void StreamingManager::write_func(void* ctx, void* data, int size) {
