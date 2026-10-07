@@ -17,7 +17,7 @@ This is not a runtime PBO-off switch and is not derived from the current optimiz
 - PBO: none
 - Streaming JPEG worker threads: none
 - JPEG: historical stb_image_write path, quality 85
-- Camera framebuffer: historical 1232 x 832 setup
+- Camera framebuffer: fixed 1232 x 832 test setup
 - NetworkEngine I/O threads: preserved because they are part of the completed historical networking implementation, not the streaming compute optimization under test
 
 ## Measurement policy
@@ -33,7 +33,7 @@ Run the same RobotPal scenario three times and report the median of the three ru
 
 **Tracy** is diagnostic only. It is used to show where the main/render thread spends time (especially synchronous readback and JPEG encoding). Tracy-enabled runs are not used as the headline PresentMon result because profiler instrumentation adds overhead.
 
-**Google Benchmark** is optional and isolated. The included target benchmarks the historical 1232 x 832, Q85 JPEG encode path. Its result describes that code path only; it must not be presented as RobotPal application FPS.
+**Google Benchmark** is optional and isolated. The included target benchmarks the 1232 x 832, Q85 JPEG test path. Its result describes that code path only; it must not be presented as RobotPal application FPS.
 
 Receiver/sink FPS is intentionally not part of this experiment.
 
