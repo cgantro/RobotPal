@@ -16,8 +16,15 @@ This branch is not a runtime feature toggle.
 - GPU readback: PBO ping-pong / double buffering
 - Streaming JPEG worker threads: none
 - JPEG: historical stb_image_write path, quality 85
-- Camera framebuffer: fixed 1232 x 832 test setup
+- Camera framebuffer: fixed 1232 x 832 requirement for license-plate recognition
 - NetworkEngine I/O threads: preserved as part of the original completed networking implementation
+
+## Fixed camera requirement
+
+- Camera framebuffer is fixed at **1232 x 832** because this resolution was selected to preserve reliable JETANK license-plate recognition quality.
+- Resolution reduction is therefore **not** considered a valid performance optimization in this experiment.
+- Camera/streaming FPS is **not capped**. Each stage is allowed to process frames as fast as the simulation and streaming path can sustain.
+- The optimization target is the transfer/processing path itself: GPU readback and JPEG execution, while keeping image resolution constant.
 
 ## Measurement policy
 
