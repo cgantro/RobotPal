@@ -26,14 +26,58 @@ This branch is not a runtime feature toggle.
 - Camera capture/streaming requests are capped at **60 FPS**, matching the practical stock Jetson Nano / IMX219 camera target. The simulation/render loop itself remains uncapped.
 - The optimization target is the transfer/processing path itself: GPU readback and JPEG execution, while keeping image resolution constant.
 
+
+## Streaming ON/OFF simulation baseline
+
+Each branch must be measured in **both** camera-streaming states.
+
+- `ROBOTPAL_STREAMING=0`: camera streaming OFF. No camera readback, JPEG encode, streaming queue, or streaming worker pool is initialized.
+- unset or `ROBOTPAL_STREAMING=1`: camera streaming ON. Camera work is capped at 60 FPS.
+- The simulation/render loop is uncapped in both states.
+- NetworkEngine remains available in both states so the comparison isolates the camera-streaming workload rather than changing the rest of the application architecture.
+
+For each branch, collect:
+
+1. **Simulation FPS — Streaming OFF**
+2. **Simulation FPS — Streaming ON**
+3. **Camera Streaming Send FPS — Streaming ON**
+
+The useful derived value is the streaming penalty:
+
+```text
+Simulation FPS penalty (%) =
+(OFF FPS - ON FPS) / OFF FPS * 100
+```
+
+This penalty is a derived comparison value, not a separately instrumented metric.
+
+### Reproducible Windows runs
+
+Streaming OFF:
+
+```powershell
+$env:ROBOTPAL_STREAMING="0"
+.\RobotPal.exe
+```
+
+Streaming ON:
+
+```powershell
+$env:ROBOTPAL_STREAMING="1"
+.\RobotPal.exe
+```
+
+Run each state three times with the same scene, window, GPU, warm-up, and measurement duration.
+
 ## Measurement policy
 
 Whole-application performance is measured externally with **PresentMon**.
 
-Only two headline metrics are retained:
+The headline measurements are:
 
-1. Camera Streaming Send FPS
-2. Simulation FPS
+1. Simulation FPS — Streaming OFF
+2. Simulation FPS — Streaming ON
+3. Camera Streaming Send FPS — Streaming ON
 
 Run the same scenario three times and report the median. Do not use an internal FPS counter or manual `std::chrono` accumulator as the final result.
 
