@@ -237,18 +237,18 @@ python -m http.server
 
 이 프로젝트는 MIT 라이선스를 따릅니다. 자세한 내용은 `LICENSE` 파일을 참고하세요.
 
-## 성능 노트: PBO 기반 비동기 Readback
+## 성능 노트: 스트리밍 병목
 
-렌더링된 프레임을 네트워크 스트리밍으로 보낼 때, 비용이 큰 구간 중 하나가 GPU 메모리의 픽셀 데이터를 CPU 메모리로 가져오는 과정(`glReadPixels`)입니다.
+최신 1232×832 벤치마크는 동기 Readback, PBO 단독, PBO + JPEG 4 Worker 구조를 비교했으며, 각 조건의 Streaming OFF/ON을 5회 측정해 median을 사용했습니다.
 
-- **동기 readback(직접 포인터):** GPU 렌더링 완료까지 CPU가 기다리며 멈출 수 있습니다.
-- **PBO readback(Pixel Pack Buffer):** GPU가 먼저 버퍼 객체에 쓰고, CPU는 다음 프레임에 이전 버퍼를 매핑해서 읽습니다.
+Tracy로 계측한 결과 초기 가설과 달리 GPU Readback이 주된 Main Thread 병목은 아니었습니다. Sync 조건에서 Readback p50은 **1.144 ms**였지만 JPEG 압축 p50은 **16.406 ms**였습니다. 따라서 PBO 단독 적용만으로는 애플리케이션 전체 성능이 개선되지 않았습니다.
 
-RobotPal 데스크톱 경로는 `Texture::GetAsyncData`에서 **PBO 2개를 번갈아 쓰는 ping-pong 구조**를 사용합니다.
+실제 효과가 컸던 변경은 JPEG 압축을 simulation critical path에서 분리한 것입니다. PBO + JPEG 4 Worker 구조에서:
 
-1. 프레임 N: `PBO[writeIndex]`에 `glReadPixels(..., 0)` 요청 (GPU 쓰기)
-2. 프레임 N: `PBO[readIndex]`를 CPU에서 매핑해 이전 프레임 데이터 읽기
-3. 인덱스를 교체하며 반복
+- Streaming ON Simulation FPS: **66.70 → 96.01** (+43.9%)
+- Camera Send FPS: **26.95 → 40.05** (+48.6%)
+- Streaming Penalty: **34.84% → 6.74%** (-28.1%p)
 
-이 방식이 모든 stall을 없애지는 않지만, 즉시 readback보다 CPU-GPU 동기화 부담을 줄이는 데 도움이 됩니다.
+아직 60 FPS 송신 목표에는 도달하지 못했습니다. 다음 우선순위는 JPEG 인코더 처리량, 불필요한 CPU 메모리 복사, 4 Worker 처리 구조입니다.
 
+최신 기준 수치와 한계는 [docs/streaming-performance-result.md](./docs/streaming-performance-result.md)를 사용합니다.
