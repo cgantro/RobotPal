@@ -100,14 +100,22 @@ void SandboxScene::OnUpdate(float dt)
     g_Controller->Move(v, w);
     g_Controller->Update(dt);
 
-   if (m_StreamingManager)
+    // Match the practical stock Jetson Nano / IMX219 camera target.
+    // Only camera streaming is capped; the simulation/render loop remains uncapped.
+    m_StreamFrameAccumulator += dt;
+    const float streamInterval = 1.0f / kCameraStreamFpsCap;
+
+    if (m_StreamingManager && m_StreamFrameAccumulator >= streamInterval)
     {
+        m_StreamFrameAccumulator -= streamInterval;
+        if (m_StreamFrameAccumulator > streamInterval)
+            m_StreamFrameAccumulator = 0.0f; // Do not burst-catch-up after a slow frame.
+
         auto data = camView->GetColorAttachment()->GetDataSync();
         if (!data.empty())
         {
             auto width = camView->GetWidth();
             auto height = camView->GetHeight();
-            // The texture format is RGBA, so 3 channels.
             m_StreamingManager->SendFrame({data, width, height, 3});
         }
     }
