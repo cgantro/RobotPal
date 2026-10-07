@@ -15,6 +15,7 @@
 
 namespace {
 constexpr std::size_t kEncodeWorkerCount = 4;
+constexpr std::size_t kMaxEncodeQueueDepth = 8;
 }
 
 StreamingManager::StreamingManager(flecs::world& world)
@@ -69,6 +70,13 @@ void StreamingManager::SendFrame(FrameData frame) {
 
     {
         std::lock_guard<std::mutex> lock(m_QueueMutex);
+
+        // Real-time stream: never allow an unbounded backlog of stale frames.
+        // The queue bound keeps benchmark memory use stable under overload.
+        if (m_EncodeQueue.size() >= kMaxEncodeQueueDepth) {
+            m_EncodeQueue.pop();
+        }
+
         m_EncodeQueue.push(std::move(frame));
     }
     m_QueueCv.notify_one();
