@@ -21,6 +21,8 @@ public:
 
     void OnImGuiRender() override;
 private:
+    static constexpr float kCameraStreamFpsCap = 60.0f;
+    float m_StreamFrameAccumulator = 0.0f;
     std::shared_ptr<IStreamingManager> m_StreamingManager;
 };
 
