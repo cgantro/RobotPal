@@ -68,7 +68,7 @@ $env:ROBOTPAL_STREAMING="1"
 .\RobotPal.exe
 ```
 
-Run each state three times with the same scene, window, GPU, warm-up, and measurement duration.
+Run each state five times with the same scene, window, GPU, warm-up, and measurement duration.
 
 ## Measurement policy
 
@@ -80,7 +80,7 @@ The headline measurements are:
 2. Simulation FPS — Streaming ON
 3. Camera Streaming Send FPS — Streaming ON
 
-Run the same RobotPal scenario three times and report the median result. Do not use an internal FPS counter or manual `std::chrono` accumulator as the final performance result.
+Run the same RobotPal scenario five times and report the median result. Do not use an internal FPS counter or manual `std::chrono` accumulator as the final performance result.
 
 **Tracy** provides the camera-stream send-rate measurement through the named frame set `CameraStreamSend`, emitted only after a JPEG packet is submitted to `NetworkEngine`. It is also used for bottleneck diagnosis. It is used to show where the main/render thread spends time (especially synchronous readback and JPEG encoding). Tracy-enabled runs are not used as the headline PresentMon result because profiler instrumentation adds overhead.
 
@@ -128,3 +128,21 @@ Compare this branch against:
 - `perf/streaming-pbo-mt`
 
 Do not compare against the 2026 benchmark harness as if it were the historical baseline.
+
+
+## Benchmark integrity gate
+
+Do not accept performance numbers unless all checks below pass.
+
+1. Use a **separate clean build directory for each branch**. Never reuse one build directory after switching branches.
+2. At startup, record the `[PERF]` banner and verify that the executable matches the intended stage:
+   - `stage=baseline-sync readback=sync-glReadPixels jpeg=main-thread`
+   - `stage=pbo readback=pbo-nonblocking jpeg=main-thread`
+   - `stage=pbo-mt readback=pbo-nonblocking jpeg=worker-pool-4`
+3. Run Streaming OFF and ON **5 times each** after the same warm-up period and use the median.
+4. Alternate run order where practical (OFF/ON/OFF/ON...) to reduce thermal and clock drift.
+5. PresentMon headline runs and Tracy diagnostic runs should be separate. Use PresentMon runs for Simulation FPS; use Tracy runs for Camera Streaming Send FPS and bottleneck evidence.
+6. The three branches share the same simulation workload when Streaming is OFF. Therefore the median Streaming-OFF Simulation FPS must be reasonably close across branches. If the max/min spread exceeds **5%**, treat the benchmark set as invalid and repeat after checking build identity, GPU selection, power state, window state, background load, and warm-up.
+7. Do not infer a PBO win from API choice alone. A valid PBO result must show that `Streaming.Readback.PBO` avoids blocking waits and that any overall gain survives the extra CPU copy from mapped PBO memory.
+
+The previous 3-run result set with Streaming-OFF FPS values of 103.95 / 92.29 / 100.54 fails the cross-branch OFF sanity check and must not be used as the final benchmark.
