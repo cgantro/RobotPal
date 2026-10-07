@@ -37,6 +37,15 @@ void SandboxScene::OnEnter()
     const char* streamingEnv = std::getenv("ROBOTPAL_STREAMING");
     m_StreamingEnabled = !(streamingEnv && streamingEnv[0] == '0' && streamingEnv[1] == '\0');
 
+    std::cout
+        << "[PERF] stage=pbo-mt"
+        << " readback=pbo-nonblocking"
+        << " jpeg=worker-pool-4"
+        << " resolution=1232x832"
+        << " stream_cap=60"
+        << " streaming=" << (m_StreamingEnabled ? "ON" : "OFF")
+        << std::endl;
+
     if (m_StreamingEnabled)
     {
         m_StreamingManager = IStreamingManager::Create(m_World);
