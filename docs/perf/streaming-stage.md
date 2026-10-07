@@ -24,7 +24,7 @@ This is not a runtime PBO-off switch and is not derived from the current optimiz
 
 - Camera framebuffer is fixed at **1232 x 832** because this resolution was selected to preserve reliable JETANK license-plate recognition quality.
 - Resolution reduction is therefore **not** considered a valid performance optimization in this experiment.
-- Camera/streaming FPS is **not capped**. Each stage is allowed to process frames as fast as the simulation and streaming path can sustain.
+- Camera capture/streaming requests are capped at **60 FPS**, matching the practical stock Jetson Nano / IMX219 camera target. The simulation/render loop itself remains uncapped.
 - The optimization target is the transfer/processing path itself: GPU readback and JPEG execution, while keeping image resolution constant.
 
 ## Measurement policy
@@ -33,16 +33,16 @@ Whole-application performance is measured externally with **PresentMon**.
 
 Only two headline metrics are retained:
 
-1. App FPS
-2. Frame Time p95
+1. Camera Streaming Send FPS
+2. Simulation FPS
 
-Run the same RobotPal scenario three times and report the median of the three runs. Do not use an internal FPS counter or manual `std::chrono` accumulator as the final performance result.
+Run the same RobotPal scenario three times and report the median result. Do not use an internal FPS counter or manual `std::chrono` accumulator as the final performance result.
 
-**Tracy** is diagnostic only. It is used to show where the main/render thread spends time (especially synchronous readback and JPEG encoding). Tracy-enabled runs are not used as the headline PresentMon result because profiler instrumentation adds overhead.
+**Tracy** provides the camera-stream send-rate measurement through the named frame set `CameraStreamSend`, emitted only after a JPEG packet is submitted to `NetworkEngine`. It is also used for bottleneck diagnosis. It is used to show where the main/render thread spends time (especially synchronous readback and JPEG encoding). Tracy-enabled runs are not used as the headline PresentMon result because profiler instrumentation adds overhead.
 
 **Google Benchmark** is optional and isolated. The included target benchmarks the 1232 x 832, Q85 JPEG test path. Its result describes that code path only; it must not be presented as RobotPal application FPS.
 
-Receiver/sink FPS is intentionally not part of this experiment.
+Receiver/sink FPS is intentionally not part of this experiment. Send FPS means frames successfully encoded and submitted by RobotPal to `NetworkEngine`, not receiver decode FPS.
 
 ## Build modes
 
