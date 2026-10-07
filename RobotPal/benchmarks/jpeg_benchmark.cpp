@@ -18,9 +18,9 @@ void WriteJpeg(void* context, void* data, int size) {
     out->bytes.insert(out->bytes.end(), begin, begin + size);
 }
 
-void BM_JpegEncode400x400Q85(benchmark::State& state) {
-    constexpr int kWidth = 400;
-    constexpr int kHeight = 400;
+void BM_JpegEncode1232x832Q85(benchmark::State& state) {
+    constexpr int kWidth = 1232;
+    constexpr int kHeight = 832;
     constexpr int kChannels = 3;
     constexpr int kQuality = 85;
 
@@ -51,6 +51,6 @@ void BM_JpegEncode400x400Q85(benchmark::State& state) {
     state.SetItemsProcessed(state.iterations());
 }
 
-BENCHMARK(BM_JpegEncode400x400Q85);
+BENCHMARK(BM_JpegEncode1232x832Q85);
 
 } // namespace
