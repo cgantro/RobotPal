@@ -68,8 +68,9 @@ private:
 
     // --- PBO(Pixel Buffer Object) 관련 ---
     // 비동기 전송을 위해 인스턴스별로 소유 (공유 불가)
-    unsigned int m_PBOs[2] = {0, 0}; 
-    int m_PBOIndex = 0;              
+    unsigned int m_PBOs[2] = {0, 0};
+    GLsync m_PBOFences[2] = {nullptr, nullptr};
+    int m_PBOIndex = 0;
     bool m_UsePBO = false;           
 
     // --- Readback FBO 관련 ---
