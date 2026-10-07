@@ -20,10 +20,10 @@ NetworkEngine's historical I/O threads exist in all three branches and are not t
 
 ## 3. Tools
 
-- **PresentMon**: authoritative whole-application result
-  - App FPS
-  - Frame Time p95
-- **Tracy Profiler**: bottleneck/timeline evidence
+- **PresentMon**: authoritative Simulation FPS
+- **Tracy Profiler**:
+  - Camera Streaming Send FPS via the named frame set `CameraStreamSend`
+  - bottleneck/timeline evidence
   - Main / Render thread
   - readback zone
   - JPEG zone
@@ -41,30 +41,31 @@ Fill only what is necessary:
 - OS:
 - Build: Release
 - Camera framebuffer: 1232 x 832 (fixed for license-plate recognition quality)
-- FPS cap: none
+- Camera streaming FPS cap: 60 FPS
+- Simulation/render FPS cap: none
 - JPEG quality: 85
 - Warm-up:
 - Measurement duration:
 - Repetitions: 3 per branch
 
-Keep scene, window size, GPU selection, camera state, and workload identical. Do not lower camera resolution or introduce an FPS cap to improve benchmark results.
+Keep scene, window size, GPU selection, camera state, and workload identical. Do not lower camera resolution. The only FPS cap is the fixed 60 FPS camera-stream target; the simulation/render loop must remain uncapped.
 
-## 5. Whole-application results
+## 5. Performance results
 
-Use the median of three PresentMon runs.
+Use three repeated runs per branch and report the median.
 
-| Stage | App FPS | Frame Time p95 |
+| Stage | Camera Streaming Send FPS | Simulation FPS |
 | --- | ---: | ---: |
-| Synchronous baseline | TBD | TBD ms |
-| PBO | TBD | TBD ms |
-| PBO + multithreading | TBD | TBD ms |
+| Synchronous baseline | TBD / 60 | TBD |
+| PBO | TBD / 60 | TBD |
+| PBO + multithreading | TBD / 60 | TBD |
 
-### Improvement summary
+### Success criteria
 
-- Baseline -> PBO App FPS: TBD
-- PBO -> PBO + MT App FPS: TBD
-- Baseline -> final App FPS: TBD
-- Baseline -> final Frame Time p95: TBD
+- Camera streaming should sustain as close to the **60 FPS camera target** as possible without exceeding it.
+- Simulation FPS should recover as readback and JPEG work are removed from the simulation/render path.
+- Receiver/decode FPS is not part of this experiment.
+- Frame-time percentiles may be retained only as secondary diagnostic evidence.
 
 Do not add more headline metrics unless they are required to explain an unexpected result.
 
@@ -121,9 +122,9 @@ This number represents isolated JPEG code-path cost and must not be described as
 
 Write the final conclusion in this order:
 
-1. How much the synchronous streaming baseline affected App FPS / Frame Time.
-2. Whether PBO reduced the main-thread readback stall and how the application result changed.
-3. Whether moving JPEG work to worker threads removed work from the caller/main path and how the application result changed.
+1. Whether the synchronous baseline can sustain the 60 FPS camera-stream target and what Simulation FPS it produces.
+2. Whether PBO improves Camera Streaming Send FPS and/or Simulation FPS by reducing readback stalls.
+3. Whether moving JPEG work to worker threads lets the stream sustain 60 FPS while recovering Simulation FPS.
 4. Any remaining bottleneck visible in Tracy.
 
 Do not claim an optimization worked unless both the profiler evidence and PresentMon result support that claim.
@@ -134,4 +135,4 @@ After measurement, write a 3-4 sentence summary using only the measured values.
 
 Recommended structure:
 
-> Camera streaming initially placed GPU readback and JPEG processing on the simulation update path, causing [measured effect]. PresentMon and Tracy were used to separate whole-app frame degradation from code-level bottlenecks. PBO readback and JPEG worker separation were applied in controlled stages, changing App FPS from [initial] to [final] and Frame Time p95 from [initial] to [final]. These values are measurements from the stated test environment and are not a general performance guarantee.
+> Camera streaming used the fixed 1232 x 832 resolution required for JETANK license-plate recognition and targeted the real-camera operating ceiling of 60 FPS. PresentMon and Tracy were used to measure Simulation FPS and completed Camera Streaming Send FPS while locating readback/JPEG bottlenecks. PBO readback and JPEG worker separation were applied in controlled stages, changing Camera Streaming Send FPS from [initial] to [final] and Simulation FPS from [initial] to [final]. These values are measurements from the stated test environment and are not a general performance guarantee.
