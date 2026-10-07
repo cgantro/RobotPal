@@ -155,3 +155,10 @@ Do not accept performance numbers unless all checks below pass.
 7. Do not infer a PBO win from API choice alone. A valid PBO result must show that `Streaming.Readback.PBO` avoids blocking waits and that any overall gain survives the extra CPU copy from mapped PBO memory.
 
 The previous 3-run result set with Streaming-OFF FPS values of 103.95 / 92.29 / 100.54 fails the cross-branch OFF sanity check and must not be used as the final benchmark.
+
+
+## Worker-queue stability
+
+The PBO+MT stage uses four JPEG workers and a queue bounded to 8 frames. If the encoder cannot sustain the 60 FPS camera input target, the oldest queued frame is discarded before enqueueing the newest frame.
+
+This bound is required to keep memory usage and latency stable during long measurements. It is not treated as a separate performance stage; Camera Streaming Send FPS still measures completed encoded frames submitted by the worker path.
