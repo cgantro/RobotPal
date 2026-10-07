@@ -60,7 +60,7 @@ void StreamingManager::Shutdown() {
     }
 }
 
-void StreamingManager::SendFrame(const FrameData& frame) {
+void StreamingManager::SendFrame(FrameData frame) {
     RP_PROFILE_SCOPE("Streaming.Enqueue");
 
     if (!m_Running.load()) {
@@ -69,7 +69,7 @@ void StreamingManager::SendFrame(const FrameData& frame) {
 
     {
         std::lock_guard<std::mutex> lock(m_QueueMutex);
-        m_EncodeQueue.push(frame);
+        m_EncodeQueue.push(std::move(frame));
     }
     m_QueueCv.notify_one();
 }
