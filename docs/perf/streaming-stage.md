@@ -25,7 +25,7 @@ No bounded-queue/drop-oldest policy or later libjpeg-turbo change is added here,
 
 - Camera framebuffer is fixed at **1232 x 832** because this resolution was selected to preserve reliable JETANK license-plate recognition quality.
 - Resolution reduction is therefore **not** considered a valid performance optimization in this experiment.
-- Camera/streaming FPS is **not capped**. Each stage is allowed to process frames as fast as the simulation and streaming path can sustain.
+- Camera capture/streaming requests are capped at **60 FPS**, matching the practical stock Jetson Nano / IMX219 camera target. The simulation/render loop itself remains uncapped.
 - The optimization target is the transfer/processing path itself: GPU readback and JPEG execution, while keeping image resolution constant.
 
 ## Measurement policy
