@@ -6,7 +6,7 @@ This branch isolates the first optimization stage: PBO double-buffered GPU readb
 
 Base application state: `2dc99a37` ("TCP Stream Test Complete", 2025-12-04).
 
-The application structure, historical stb_image_write JPEG path, quality 85, and 400 x 400 camera framebuffer are intentionally kept aligned with `perf/streaming-baseline-sync`. The relevant difference is the historical PBO ping-pong readback implementation.
+The application structure, historical stb_image_write JPEG path, quality 85, and 1232 x 832 camera framebuffer are intentionally kept aligned with `perf/streaming-baseline-sync`. The relevant difference is the historical PBO ping-pong readback implementation.
 
 This branch is not a runtime feature toggle.
 
@@ -16,7 +16,7 @@ This branch is not a runtime feature toggle.
 - GPU readback: PBO ping-pong / double buffering
 - Streaming JPEG worker threads: none
 - JPEG: historical stb_image_write path, quality 85
-- Camera framebuffer: historical 400 x 400 setup
+- Camera framebuffer: historical 1232 x 832 setup
 - NetworkEngine I/O threads: preserved as part of the original completed networking implementation
 
 ## Measurement policy
@@ -32,7 +32,7 @@ Run the same scenario three times and report the median. Do not use an internal 
 
 **Tracy** is diagnostic only. Use it to inspect the `Frame`, `Streaming.Readback.PBO`, `Streaming.SendFrame`, and `Streaming.JPEG` zones. Tracy-enabled runs are not the headline PresentMon runs.
 
-**Google Benchmark** is optional and isolated. The included JPEG benchmark is a control for the same historical 400 x 400 Q85 JPEG path; it is not RobotPal FPS.
+**Google Benchmark** is optional and isolated. The included JPEG benchmark is a control for the same historical 1232 x 832 Q85 JPEG path; it is not RobotPal FPS.
 
 Receiver/sink FPS is intentionally excluded.
 
