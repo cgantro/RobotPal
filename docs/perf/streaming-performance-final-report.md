@@ -40,7 +40,7 @@ Fill only what is necessary:
 - GPU:
 - OS:
 - Build: Release
-- Camera framebuffer: 400 x 400
+- Camera framebuffer: 1232 x 832
 - JPEG quality: 85
 - Warm-up:
 - Measurement duration:
@@ -112,7 +112,7 @@ Only include this section if the Google Benchmark result helps explain the timel
 
 | Benchmark | Result |
 | --- | ---: |
-| 400 x 400 RGB, JPEG Q85 | TBD |
+| 1232 x 832 RGB, JPEG Q85 | TBD |
 
 This number represents isolated JPEG code-path cost and must not be described as RobotPal application performance.
 
