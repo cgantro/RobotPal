@@ -86,8 +86,6 @@ struct RenderTarget {
 
 struct VideoSender {
     int width, height;
-    float fpsLimit;
-    float timeSinceLastFrame;
 };
 
 #endif
