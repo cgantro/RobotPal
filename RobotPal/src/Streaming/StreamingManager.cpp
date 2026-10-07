@@ -27,7 +27,7 @@ void StreamingManager::Shutdown() {
 
 // [삭제] Connect/Disconnect 구현 제거
 
-void StreamingManager::SendFrame(const FrameData& frame) {
+void StreamingManager::SendFrame(FrameData frame) {
     RP_PROFILE_SCOPE("Streaming.SendFrame");
     auto& handle = m_World.get_mut<NetworkEngineHandle>();
 
