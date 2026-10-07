@@ -21,7 +21,7 @@ public:
 
     void Init() override;
     void Shutdown() override;
-    void SendFrame(const FrameData& frame) override;
+    void SendFrame(FrameData frame) override;
 
 private:
     struct WriteContext {
