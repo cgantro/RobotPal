@@ -16,10 +16,17 @@ This branch is not a runtime multithreading toggle.
 - Streaming JPEG workers: 4
 - Queue: simple FIFO work queue
 - Drop policy: none
-- Camera framebuffer: fixed 1232 x 832 test setup
+- Camera framebuffer: fixed 1232 x 832 requirement for license-plate recognition
 - NetworkEngine I/O threads: unchanged from the historical completed implementation
 
 No bounded-queue/drop-oldest policy or later libjpeg-turbo change is added here, because those would introduce additional variables into the PBO + multithreading comparison.
+
+## Fixed camera requirement
+
+- Camera framebuffer is fixed at **1232 x 832** because this resolution was selected to preserve reliable JETANK license-plate recognition quality.
+- Resolution reduction is therefore **not** considered a valid performance optimization in this experiment.
+- Camera/streaming FPS is **not capped**. Each stage is allowed to process frames as fast as the simulation and streaming path can sustain.
+- The optimization target is the transfer/processing path itself: GPU readback and JPEG execution, while keeping image resolution constant.
 
 ## Measurement policy
 
