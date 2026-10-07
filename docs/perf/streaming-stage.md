@@ -4,7 +4,7 @@
 
 This branch is the third controlled stage in the RobotPal camera-streaming comparison.
 
-It is derived directly from `perf/streaming-pbo`, so the PBO readback code, historical camera setup, JPEG implementation, JPEG quality, and profiling toolchain are unchanged. The added variable is streaming JPEG work being moved off the caller/main update path to a fixed worker pool.
+It is derived directly from `perf/streaming-pbo`, so the PBO readback code, fixed test camera setup, JPEG implementation, JPEG quality, and profiling toolchain are unchanged. The added variable is streaming JPEG work being moved off the caller/main update path to a fixed worker pool.
 
 This branch is not a runtime multithreading toggle.
 
@@ -16,7 +16,7 @@ This branch is not a runtime multithreading toggle.
 - Streaming JPEG workers: 4
 - Queue: simple FIFO work queue
 - Drop policy: none
-- Camera framebuffer: historical 1232 x 832 setup
+- Camera framebuffer: fixed 1232 x 832 test setup
 - NetworkEngine I/O threads: unchanged from the historical completed implementation
 
 No bounded-queue/drop-oldest policy or later libjpeg-turbo change is added here, because those would introduce additional variables into the PBO + multithreading comparison.
