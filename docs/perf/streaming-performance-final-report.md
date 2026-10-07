@@ -159,3 +159,18 @@ After measurement, write a 3-4 sentence summary using only the measured values.
 Recommended structure:
 
 > Camera streaming used the fixed 1232 x 832 resolution required for JETANK license-plate recognition and targeted a 60 FPS real-camera operating ceiling. Each stage was measured with Streaming OFF and ON to quantify the simulation-side cost of camera streaming, while Tracy measured completed Camera Streaming Send FPS and exposed readback/JPEG bottlenecks. PBO readback and JPEG worker separation changed the streaming penalty from [initial penalty] to [final penalty] while Camera Streaming Send FPS changed from [initial] to [final]. These values are measurements from the stated test environment and are not a general performance guarantee.
+
+
+## Previous result set invalidation
+
+The earlier result set below is retained only as a rejected trial and must not be used as final evidence:
+
+| Stage | Simulation FPS OFF | Simulation FPS ON | Camera Send FPS ON | Penalty |
+| --- | ---: | ---: | ---: | ---: |
+| baseline-sync | 103.95 | 65.42 | 29.67 | 37.07% |
+| pbo | 92.29 | 61.88 | 30.03 | 32.95% |
+| pbo-mt | 100.54 | 85.70 | 42.19 | 14.76% |
+
+Reason for rejection: Streaming-OFF performance differs too much across branches even though the active simulation/render workload should be equivalent. In addition, the original PBO path could block in `glMapBufferRange`, the MT queue was unbounded, frame ownership introduced multi-megabyte copies, and `NetworkEngine::SendPacket` contained an artificial `Sleep(1)`.
+
+Rerun only after verifying the startup `[PERF]` stage banner and using separate clean build directories.
