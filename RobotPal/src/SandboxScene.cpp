@@ -59,7 +59,7 @@ void SandboxScene::OnEnter()
     auto robotCamera=CreateEntity("robotCam");
     robotCamera.Set<Camera>({80.f, 0.001f, 1000.f})
                .Set<RenderTarget>({camView})
-               .Set<VideoSender>({1232, 832, 15.0f});
+               .Set<VideoSender>({1232, 832});
     
     auto attachPoint=prefabEntity.FindChildByNameRecursive(prefabEntity, "Cam");
     if(attachPoint)
