@@ -1,4 +1,5 @@
 #include "RobotPal/Core/Texture.h"
+#include "RobotPal/Util/Profiling.h"
 
 #include <cstring> // memcpy
 
@@ -24,9 +25,6 @@ Texture::Texture(int width, int height, const void* data, TextureFormat format)
 
 Texture::~Texture() {
     if (m_RendererID) glDeleteTextures(1, &m_RendererID);
-    
-    // PBO가 생성되었다면 정리
-    if (m_UsePBO) glDeleteBuffers(2, m_PBOs);
 }
 
 void Texture::Bind(int slot) const {
@@ -49,12 +47,6 @@ void Texture::Resize(int width, int height) {
     if (m_RendererID) glDeleteTextures(1, &m_RendererID);
     CreateInternal();
 
-    // 중요: PBO도 사이즈가 바뀌었으므로 재생성 필요
-    if (m_UsePBO) {
-        glDeleteBuffers(2, m_PBOs);
-        m_UsePBO = false; 
-        // InitPBOs()는 다음번 GetAsyncData 호출 시 자동으로 실행됨
-    }
 }
 
 void Texture::SetData(const void* data, int size) {
@@ -102,84 +94,39 @@ void Texture::SetCubeMapData(const std::vector<void*>& faces) {
 }
 
 // ---------------------------------------------------------
-// [핵심] PBO를 이용한 비동기 데이터 읽기 (Double Buffering)
+// Baseline GPU -> CPU readback: synchronous glReadPixels, no PBO.
 // ---------------------------------------------------------
-std::vector<uint8_t> Texture::GetAsyncData() {
-    if (m_Type != TextureType::Texture2D) return {}; // 큐브맵 등은 미지원
+std::vector<uint8_t> Texture::GetDataSync() {
+    RP_PROFILE_SCOPE("Streaming.Readback.Sync");
 
-    // 1. PBO 지연 초기화 (필요할 때만 메모리 할당)
-    if (!m_UsePBO) InitPBOs();
+    if (m_Type != TextureType::Texture2D) return {};
+    if (m_Format != TextureFormat::RGB8 && m_Format != TextureFormat::RGBA8) return {};
 
-    int channels = (m_Format == TextureFormat::RGBA8) ? 4 : 3;
-    int dataSize = m_Width * m_Height * channels;
-    std::vector<uint8_t> result(dataSize);
+    const int channels = (m_Format == TextureFormat::RGBA8) ? 4 : 3;
+    const int dataSize = m_Width * m_Height * channels;
+    std::vector<uint8_t> result(static_cast<size_t>(dataSize));
 
-    // 인덱스 스위칭 (Ping-Pong)
-    // index: 이번에 GPU에 "담아놔"라고 명령할 버퍼
-    // nextIndex: 이번에 CPU가 "내놔"라고 열어볼 버퍼 (이전 프레임 데이터)
-    int writeIndex = m_PBOIndex;
-    int readIndex = (m_PBOIndex + 1) % 2;
-    m_PBOIndex = (m_PBOIndex + 1) % 2; // 다음을 위해 인덱스 변경
-
-    // --- STEP 1: GPU에게 캡처 명령 (비동기 Write) ---
-    
-    // 정적 FBO 생성 및 바인딩
     if (s_ReadFBO == 0) glGenFramebuffers(1, &s_ReadFBO);
-    
-    // 현재 바인딩 상태 백업
-    GLint lastFBO;
+
+    GLint lastFBO = 0;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &lastFBO);
 
     glBindFramebuffer(GL_FRAMEBUFFER, s_ReadFBO);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_RendererID, 0);
+    glFramebufferTexture2D(
+        GL_FRAMEBUFFER,
+        GL_COLOR_ATTACHMENT0,
+        GL_TEXTURE_2D,
+        m_RendererID,
+        0
+    );
 
-    // 쓰기용 PBO 바인딩
-    glBindBuffer(GL_PIXEL_PACK_BUFFER, m_PBOs[writeIndex]);
-    
-    // 팩 정렬 설정 (중요)
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    const GLenum format = (m_Format == TextureFormat::RGBA8) ? GL_RGBA : GL_RGB;
+    glReadPixels(0, 0, m_Width, m_Height, format, GL_UNSIGNED_BYTE, result.data());
+    glPixelStorei(GL_PACK_ALIGNMENT, 4);
 
-    // ReadPixels 호출 (PBO가 바인딩되어 있으므로 즉시 리턴됨)
-    GLenum format = (m_Format == TextureFormat::RGBA8) ? GL_RGBA : GL_RGB;
-    glReadPixels(0, 0, m_Width, m_Height, format, GL_UNSIGNED_BYTE, 0);
-
-    // FBO 상태 복구
-    glBindFramebuffer(GL_FRAMEBUFFER, lastFBO);
-
-
-    // --- STEP 2: 이전 프레임 데이터 가져오기 (CPU Read) ---
-    
-    glBindBuffer(GL_PIXEL_PACK_BUFFER, m_PBOs[readIndex]);
-    
-    // GLES 3.0 / GL 3.0 방식 맵핑
-    void* ptr = glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, dataSize, GL_MAP_READ_BIT);
-    
-    if (ptr) {
-        memcpy(result.data(), ptr, dataSize);
-        glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
-    } else {
-        // 첫 프레임이거나 에러 시: 데이터가 없으므로 그냥 빈 상태 혹은 0 리턴
-        // (보통 첫 1~2 프레임은 검은색이 나옴)
-    }
-
-    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0); // PBO 언바인딩
-    glPixelStorei(GL_PACK_ALIGNMENT, 4);   // 정렬 복구
-
+    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(lastFBO));
     return result;
-}
-
-void Texture::InitPBOs() {
-    int channels = (m_Format == TextureFormat::RGBA8) ? 4 : 3;
-    int dataSize = m_Width * m_Height * channels;
-
-    glGenBuffers(2, m_PBOs);
-    for (int i = 0; i < 2; i++) {
-        glBindBuffer(GL_PIXEL_PACK_BUFFER, m_PBOs[i]);
-        // GL_STREAM_READ: 데이터를 한번 쓰고, 몇 번 읽는 패턴 (스트리밍 최적화)
-        glBufferData(GL_PIXEL_PACK_BUFFER, dataSize, nullptr, GL_STREAM_READ);
-    }
-    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
-    m_UsePBO = true;
 }
 
 void Texture::CreateInternal() {

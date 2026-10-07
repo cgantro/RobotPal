@@ -102,7 +102,7 @@ void SandboxScene::OnUpdate(float dt)
 
    if (m_StreamingManager)
     {
-        auto data = camView->GetColorAttachment()->GetAsyncData();
+        auto data = camView->GetColorAttachment()->GetDataSync();
         if (!data.empty())
         {
             auto width = camView->GetWidth();

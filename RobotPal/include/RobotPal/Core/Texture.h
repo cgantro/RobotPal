@@ -43,9 +43,9 @@ public:
     // [CPU -> GPU] 큐브맵 데이터 업로드 (순서: Right, Left, Top, Bottom, Front, Back)
     void SetCubeMapData(const std::vector<void*>& faces);
 
-    // [GPU -> CPU] 비동기 데이터 읽기 (PBO 사용, Non-blocking)
-    // 네트워크 전송 시 이 함수를 사용하세요. (1프레임 지연 있음)
-    std::vector<uint8_t> GetAsyncData();
+    // [GPU -> CPU] synchronous readback.
+    // This branch intentionally has no PBO so it can serve as the pre-PBO baseline.
+    std::vector<uint8_t> GetDataSync();
 
     // Getters
     unsigned int GetID() const { return m_RendererID; }
@@ -59,18 +59,10 @@ public:
 
 private:
     void CreateInternal();
-    void InitPBOs(); // PBO 지연 초기화
-
     unsigned int m_RendererID = 0;
     int m_Width, m_Height;
     TextureFormat m_Format;
     TextureType m_Type;
-
-    // --- PBO(Pixel Buffer Object) 관련 ---
-    // 비동기 전송을 위해 인스턴스별로 소유 (공유 불가)
-    unsigned int m_PBOs[2] = {0, 0}; 
-    int m_PBOIndex = 0;              
-    bool m_UsePBO = false;           
 
     // --- Readback FBO 관련 ---
     // 읽기 작업을 위한 임시 FBO는 전역 공유 (메모리 절약)
