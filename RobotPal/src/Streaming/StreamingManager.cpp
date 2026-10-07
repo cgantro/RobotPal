@@ -125,6 +125,7 @@ void StreamingManager::EncodeWorkerLoop() {
         packet.insert(packet.end(), ctx.buffer.begin(), ctx.buffer.end());
 
         m_NetworkEngine->SendPacket(packet);
+        RP_PROFILE_STREAM_FRAME();
     }
 }
 
