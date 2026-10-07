@@ -16,7 +16,7 @@ This branch is not a runtime multithreading toggle.
 - Streaming JPEG workers: 4
 - Queue: simple FIFO work queue
 - Drop policy: none
-- Camera framebuffer: historical 400 x 400 setup
+- Camera framebuffer: historical 1232 x 832 setup
 - NetworkEngine I/O threads: unchanged from the historical completed implementation
 
 No bounded-queue/drop-oldest policy or later libjpeg-turbo change is added here, because those would introduce additional variables into the PBO + multithreading comparison.
@@ -44,7 +44,7 @@ Do not use internal FPS counters, receiver FPS, or manual `std::chrono` statisti
 
 The expected structural change is not assumed to be faster in advance; verify that JPEG work actually leaves the main/update path and whether App FPS / Frame Time improve.
 
-**Google Benchmark** remains an isolated control for the same 400 x 400 Q85 JPEG code path. It is not application FPS.
+**Google Benchmark** remains an isolated control for the same 1232 x 832 Q85 JPEG code path. It is not application FPS.
 
 ## Build modes
 
