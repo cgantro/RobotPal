@@ -18,6 +18,7 @@
 #include <iostream>
 #include <cstdlib>
 #include <memory>
+#include <utility>
 
 
 static std::unique_ptr<IRobotController> g_Controller;
@@ -137,7 +138,7 @@ void SandboxScene::OnUpdate(float dt)
         {
             auto width = camView->GetWidth();
             auto height = camView->GetHeight();
-            m_StreamingManager->SendFrame({data, width, height, 3});
+            m_StreamingManager->SendFrame({std::move(data), width, height, 3});
         }
     }
 
