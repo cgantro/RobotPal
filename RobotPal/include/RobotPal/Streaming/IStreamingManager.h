@@ -22,7 +22,7 @@ public:
 
     virtual void Init() = 0;
     virtual void Shutdown() = 0;
-    virtual void SendFrame(const FrameData& frame) = 0;
+    virtual void SendFrame(FrameData frame) = 0;
     // -----------------------------
     // Static Factory
     // -----------------------------
