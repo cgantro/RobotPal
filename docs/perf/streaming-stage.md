@@ -16,7 +16,7 @@ This branch is not a runtime feature toggle.
 - GPU readback: PBO ping-pong / double buffering
 - Streaming JPEG worker threads: none
 - JPEG: historical stb_image_write path, quality 85
-- Camera framebuffer: historical 1232 x 832 setup
+- Camera framebuffer: fixed 1232 x 832 test setup
 - NetworkEngine I/O threads: preserved as part of the original completed networking implementation
 
 ## Measurement policy
@@ -32,7 +32,7 @@ Run the same scenario three times and report the median. Do not use an internal 
 
 **Tracy** is diagnostic only. Use it to inspect the `Frame`, `Streaming.Readback.PBO`, `Streaming.SendFrame`, and `Streaming.JPEG` zones. Tracy-enabled runs are not the headline PresentMon runs.
 
-**Google Benchmark** is optional and isolated. The included JPEG benchmark is a control for the same historical 1232 x 832 Q85 JPEG path; it is not RobotPal FPS.
+**Google Benchmark** is optional and isolated. The included JPEG benchmark is a control for the same 1232 x 832 Q85 JPEG test path; it is not RobotPal FPS.
 
 Receiver/sink FPS is intentionally excluded.
 
