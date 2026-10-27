@@ -97,6 +97,16 @@ python -m http.server
 # Open your browser and go to http://localhost:8000/index.html
 ```
 
+## Camera-task verification and frame-rate interpretation
+
+RobotPal provides a JetBot-compatible Python camera interface (`RobotPal-python/src/robotpal/camera/virtual_camera.py`). Its default configuration requests 224×224 at 30 FPS; this setting does **not** establish the actual received or analyzed FPS.
+
+During project trials, **line following and license-plate recognition operated successfully** with the virtual camera setup (participant-reported functional result). The repository does not establish numerical recognition accuracy, Jetson Nano inference throughput, end-to-end latency, or the frame rate at which each task was verified.
+
+The separate **1232×832** desktop benchmark measures simulation updates and camera **sending**, not Jetson inference. It used 60 FPS as an **upper performance target**, not as a proven requirement for line following or plate recognition. A configured 30/40/60 FPS permits about 33.3/25.0/16.7 ms per frame respectively; the achievable analysis rate depends on the model, resolution, preprocessing, and hardware. NVIDIA has reported substantially different Jetson Nano end-to-end license-plate processing rates across pipelines ([9.2 FPS full pipeline](https://developer.nvidia.com/blog/?p=23943); [40 FPS project example](https://developer.nvidia.com/embedded/community/jetson-projects/real_time-alpr_jetson_nano)). Neither figure is a RobotPal measurement.
+
+The streaming benchmark results and limitations are recorded in [the performance report](./docs/streaming-performance-result.md).
+
 ## Contributing
 
 Contributions are always welcome! If you would like to contribute to RobotPal, please fork the repository and create a pull request. You can also open an issue to report bugs or suggest new features.
@@ -237,6 +247,22 @@ python -m http.server
 
 이 프로젝트는 MIT 라이선스를 따릅니다. 자세한 내용은 `LICENSE` 파일을 참고하세요.
 
+## 카메라 활용 결과와 FPS 해석
+
+가상 카메라 영상을 이용한 **라인트레이싱과 번호판 인식이 실제 실습에서 정상 동작했음**을 확인했습니다(프로젝트 참여자의 기능 확인). 다만 해당 실습의 인식률, 제어 주기, 추론 FPS, 종단 간 지연은 정량 측정 자료가 없어 수치로 주장하지 않습니다. Jetson Nano에서 실행한 알고리즘의 처리량을 RobotPal의 송신 FPS와 동일하게 해석하지도 않습니다.
+
+Python 가상 카메라 어댑터(`RobotPal-python/src/robotpal/camera/virtual_camera.py`)는 JetBot 호환 인터페이스를 제공하며 기본 **224×224, 설정 30 FPS**를 사용합니다. 이 값은 설정값일 뿐 수신·추론 속도를 측정한 결과는 아닙니다.
+
+| 카메라 설정 프레임률 | 프레임당 시간 | 해석 |
+| --- | ---: | --- |
+| 30 FPS | 약 33.3ms | 실시간 처리 여부를 확인하기 위한 합리적인 출발점. 안정성은 별도 측정 필요 |
+| 40 FPS | 25.0ms | 더 자주 영상을 받을 수 있지만, 실제 인식·제어 속도는 알고리즘 성능에 좌우됨 |
+| 60 FPS | 약 16.7ms | 프레임 수집이 가능해도 매 프레임 추론·제어가 같은 주기로 수행된다는 보장은 없음 |
+
+NVIDIA 공개 사례에서도 Jetson Nano의 번호판 관련 처리량은 작업 범위에 따라 달랐습니다. [번호판 인식 프로젝트 사례](https://developer.nvidia.com/embedded/community/jetson-projects/real_time-alpr_jetson_nano)는 40FPS를 보고했지만, [차량 탐지부터 번호판 인식까지 포함한 전체 파이프라인](https://developer.nvidia.com/blog/?p=23943)은 9.2FPS였습니다. 어느 쪽도 RobotPal 실습 결과로 인용할 수 없습니다.
+
+아래 **1232×832** 성능 시험은 시뮬레이터의 **영상 송신률**과 **시뮬레이션 갱신률**을 비교한 것입니다. 60FPS는 송신 경로의 상향 목표였으며, 라인트레이싱이나 번호판 인식에 반드시 필요한 프레임률로 검증한 값이 아닙니다.
+
 ## 성능 노트: 스트리밍 병목
 
 최신 1232×832 벤치마크는 동기 Readback, PBO 단독, PBO + JPEG 4 Worker 구조를 비교했으며, 각 조건의 Streaming OFF/ON을 5회 측정해 median을 사용했습니다.
@@ -249,6 +275,6 @@ Tracy로 계측한 결과 초기 가설과 달리 GPU Readback이 주된 Main Th
 - Camera Send FPS: **26.95 → 40.05** (+48.6%)
 - Streaming Penalty: **34.84% → 6.74%** (-28.1%p)
 
-아직 60 FPS 송신 목표에는 도달하지 못했습니다. 다음 우선순위는 JPEG 인코더 처리량, 불필요한 CPU 메모리 복사, 4 Worker 처리 구조입니다.
+최종 카메라 송신률 **40.05FPS**는 송신 경로의 성능이며, 외부 영상 인식의 실제 처리 FPS와 구분합니다. 60FPS 송신이라는 상향 목표에는 도달하지 못했습니다. 다음 개선 대상은 JPEG 인코더 처리량, 불필요한 CPU 메모리 복사, 4 Worker 처리 구조입니다.
 
 최신 기준 수치와 한계는 [docs/streaming-performance-result.md](./docs/streaming-performance-result.md)를 사용합니다.
